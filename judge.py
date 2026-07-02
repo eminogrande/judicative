@@ -470,6 +470,7 @@ class LLMBackend:
             elif self.provider == 'anthropic':
                 return self._call_anthropic(prompt, system, temperature)
         except Exception as e:
+            print(f"  LLM call error: {e}", file=sys.stderr)
             return {"score": 0.5, "explanation": f"LLM call failed: {e}"}
 
     def _call_openai_compatible(self, prompt: str, system: str, temperature: float) -> dict:
@@ -492,11 +493,11 @@ class LLMBackend:
                 {"role": "user", "content": prompt},
             ],
             "temperature": temperature,
-            "max_tokens": 2000,
+            "max_tokens": 8000,
         }).encode()
 
         req = urllib.request.Request(url, data=body, headers=headers)
-        with urllib.request.urlopen(req, timeout=60) as resp:
+        with urllib.request.urlopen(req, timeout=120) as resp:
             data = json.loads(resp.read())
 
         text = data['choices'][0]['message']['content']
@@ -520,11 +521,11 @@ class LLMBackend:
             "system": system,
             "messages": [{"role": "user", "content": prompt}],
             "temperature": temperature,
-            "max_tokens": 2000,
+            "max_tokens": 8000,
         }).encode()
 
         req = urllib.request.Request(url, data=body, headers=headers)
-        with urllib.request.urlopen(req, timeout=60) as resp:
+        with urllib.request.urlopen(req, timeout=120) as resp:
             data = json.loads(resp.read())
 
         text = data['content'][0]['text']
@@ -664,6 +665,8 @@ def evaluate_llm_rules(llm: LLMBackend, rubric: dict, issue: str,
                     'score': float(rs.get('score', 0.5)),
                     'explanation': rs.get('explanation', ''),
                 })
+    else:
+        print(f"  LLM WARNING: response missing 'rule_scores' key. Got: {str(result)[:200]}", file=sys.stderr)
 
     return assessments
 
