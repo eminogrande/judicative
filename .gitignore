@@ -1,0 +1,24 @@
+# Data directories (reproducible via scan_all.py — don't bloat the repo)
+full-scan/
+nuri-com-review-data/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Results
+results.json
+validation_results.json

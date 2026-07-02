@@ -1,0 +1,767 @@
+{
+  "$schema": "judicative-rubric-v2",
+  "description": "Data-driven rubric v2, derived from 3,972 comments across 49 nuri-com repos (411 PRs, 646 issues, 1,707 inline comments, 752 general comments, 1,384 PR reviews, 293 issue comments). Weights are proportional to comment frequency with a minimum floor for catastrophic-but-rare categories (security). The top 2 categories (race_condition 12.5%, stale_state 9.4%) were ABSENT from rubric v1.",
+  "version": "2.0.0",
+  "source_data": {
+    "total_comments": 3972,
+    "classified": 2404,
+    "unclassified": 1568,
+    "classification_rate": 60.5,
+    "repos_scanned": 49,
+    "prs_analyzed": 411,
+    "issues_analyzed": 646,
+    "comment_types": {
+      "pr_inline": 1707,
+      "pr_general": 752,
+      "pr_reviews": 1384,
+      "issue_comments": 293
+    },
+    "top_authors": {
+      "chatgpt-codex-connector[bot]": 975,
+      "coderabbitai[bot]": 943,
+      "gemini-code-assist[bot]": 702,
+      "Rooksudo": 517,
+      "taner-caliskan": 498,
+      "eminogrande": 231,
+      "emil-apeunit": 229
+    }
+  },
+  "categories": {
+    "race_condition": {
+      "weight": 0.18,
+      "hard_gate": false,
+      "source_frequency": 12.5,
+      "source_count": 498,
+      "description": "Async operations without cancellation, in-flight leaks, missing cleanup on unmount, floating promises, concurrent access without ordering guarantees. The #1 most common issue in the codebase.",
+      "rules": [
+        {
+          "id": "RACE-001",
+          "name": "Missing cleanup in useEffect",
+          "check_type": "static",
+          "pattern": "useEffect\\s*\\([^,]+,\\s*\\[\\s*\\]\\s*\\)",
+          "severity": "major",
+          "description": "useEffect with empty dependency array that references state or props — the closure captures mount-time values. Check if the effect reads variables not in the deps array."
+        },
+        {
+          "id": "RACE-002",
+          "name": "Floating promise (void async call)",
+          "check_type": "static",
+          "pattern": "\\bvoid\\s+\\w+\\(",
+          "severity": "major",
+          "description": "Using `void` before an async call creates a floating promise — if it rejects, the error is swallowed and the operation can't be cancelled."
+        },
+        {
+          "id": "RACE-003",
+          "name": "Async operation without cancellation",
+          "check_type": "llm",
+          "severity": "major",
+          "description": "Async operations (fetch, subscriptions, timers) started in useEffect or event handlers must have cancellation logic. Without it, in-flight requests leak and stale responses can overwrite fresh state."
+        },
+        {
+          "id": "RACE-004",
+          "name": "Missing AbortController for fetch",
+          "check_type": "llm",
+          "severity": "major",
+          "description": "Fetch calls in React components should use AbortController to cancel on unmount. Without it, responses arriving after unmount cause state updates on unmounted components."
+        },
+        {
+          "id": "RACE-005",
+          "name": "Concurrent state mutation",
+          "check_type": "llm",
+          "severity": "critical",
+          "description": "Multiple async operations writing to the same state without ordering guarantees. Use mutex, queue, or atomic updates to prevent interleaving."
+        }
+      ]
+    },
+    "stale_state": {
+      "weight": 0.15,
+      "hard_gate": false,
+      "source_frequency": 9.4,
+      "source_count": 373,
+      "description": "Cached data read after an async gap without revalidation. useEffect closures capturing stale values. Ghost balances. The #2 most common issue.",
+      "rules": [
+        {
+          "id": "STALE-001",
+          "name": "useEffect reads state not in dependency array",
+          "check_type": "static",
+          "pattern": "useEffect\\s*\\(.*\\{[^}]*\\b(set\\w+|\\w+State|\\w+Ref)\\b[^}]*\\}\\s*,\\s*\\[",
+          "severity": "major",
+          "description": "useEffect that reads state variables but doesn't list them in the dependency array. The closure captures the mount-time value, causing stale reads."
+        },
+        {
+          "id": "STALE-002",
+          "name": "Cached data used after async gap",
+          "check_type": "llm",
+          "severity": "major",
+          "description": "Data fetched or computed before an await is used after the await without revalidation. The data may be stale if state changed during the async gap."
+        },
+        {
+          "id": "STALE-003",
+          "name": "Ghost balance display",
+          "check_type": "llm",
+          "severity": "major",
+          "description": "Balance or amount displayed from cached state without checking if a more recent update is available. Users see incorrect balances."
+        },
+        {
+          "id": "STALE-004",
+          "name": "Missing refetch on focus/reconnect",
+          "check_type": "llm",
+          "severity": "minor",
+          "description": "Data that can change server-side (balances, transaction status) should be refetched on app focus or network reconnect."
+        }
+      ]
+    },
+    "ui_component": {
+      "weight": 0.08,
+      "hard_gate": false,
+      "source_frequency": 4.7,
+      "source_count": 187,
+      "description": "Screen layout, component structure, modal behavior, navigation issues.",
+      "rules": [
+        {
+          "id": "UI-001",
+          "name": "Modal layer isolation",
+          "check_type": "llm",
+          "severity": "major",
+          "description": "Modals and overlay layers must isolate content — accessibilityViewIsModal, aria-hidden on background, pointerEvents on layers."
+        },
+        {
+          "id": "UI-002",
+          "name": "Back handler on layers",
+          "check_type": "llm",
+          "severity": "major",
+          "description": "Hardware back button must be consumed by visible layers to prevent back falling through to content behind blocking layers."
+        },
+        {
+          "id": "UI-003",
+          "name": "Component prop correctness",
+          "check_type": "llm",
+          "severity": "minor",
+          "description": "Components must receive correct props — wrong types, missing required props, or incorrect conditional rendering."
+        }
+      ]
+    },
+    "architecture": {
+      "weight": 0.08,
+      "hard_gate": false,
+      "source_frequency": 4.7,
+      "source_count": 185,
+      "description": "Code structure, separation of concerns, module boundaries, dependency management.",
+      "rules": [
+        {
+          "id": "ARCH-001",
+          "name": "Circular dependency",
+          "check_type": "llm",
+          "severity": "major",
+          "description": "Modules that import each other create circular dependencies that cause runtime errors or initialization order issues."
+        },
+        {
+          "id": "ARCH-002",
+          "name": "Separation of concerns",
+          "check_type": "llm",
+          "severity": "minor",
+          "description": "Business logic mixed with UI rendering, or crypto operations in view components. Extract into hooks or services."
+        },
+        {
+          "id": "ARCH-003",
+          "name": "Module structure",
+          "check_type": "llm",
+          "severity": "minor",
+          "description": "Files should have a single responsibility. Mixing unrelated functionality in one file makes the codebase harder to navigate."
+        }
+      ]
+    },
+    "code_style": {
+      "weight": 0.05,
+      "hard_gate": false,
+      "source_frequency": 3.1,
+      "source_count": 125,
+      "description": "Lint compliance, formatting, import ordering, naming conventions.",
+      "rules": [
+        {
+          "id": "STYLE-001",
+          "name": "ESLint compliance",
+          "check_type": "llm",
+          "severity": "minor",
+          "description": "Code should pass eslint with the project's configured ruleset."
+        },
+        {
+          "id": "STYLE-002",
+          "name": "Import ordering",
+          "check_type": "llm",
+          "severity": "nitpick",
+          "description": "Imports should be ordered and grouped consistently (stdlib, external, internal, relative)."
+        }
+      ]
+    },
+    "security_crypto": {
+      "weight": 0.10,
+      "hard_gate": true,
+      "source_frequency": 2.4,
+      "source_count": 97,
+      "description": "Cryptographic correctness, key handling, attack surface. Weight is higher than frequency because a single crypto mistake is catastrophic in a wallet.",
+      "rules": [
+        {
+          "id": "SEC-001",
+          "name": "No private keys in localStorage",
+          "check_type": "static",
+          "pattern": "localStorage\\.(setItem|getItem)\\s*\\([^)]*\\b(key|seed|mnemonic|private|secret|credential|passkey|password|wallet)\\b",
+          "severity": "critical",
+          "description": "Persisting private keys, seeds, mnemonics, or credentials in localStorage breaks the security boundary."
+        },
+        {
+          "id": "SEC-002",
+          "name": "No hardcoded secrets",
+          "check_type": "static",
+          "pattern": "(password|api_key|secret|token|mnemonic|seed)\\s*[:=]\\s*['\"][^'\"]{8,}['\"]",
+          "severity": "critical",
+          "description": "Hardcoded secrets, API keys, or operator details must never be committed."
+        },
+        {
+          "id": "SEC-003",
+          "name": "No Math.random for crypto",
+          "check_type": "static",
+          "pattern": "Math\\.random\\s*\\(",
+          "severity": "critical",
+          "description": "Math.random() is not cryptographically secure. Use crypto.getRandomValues()."
+        },
+        {
+          "id": "SEC-004",
+          "name": "No eval or Function constructor",
+          "check_type": "static",
+          "pattern": "\\beval\\s*\\(|new\\s+Function\\s*\\(",
+          "severity": "critical",
+          "description": "eval() and new Function() execute arbitrary strings as code."
+        },
+        {
+          "id": "SEC-005",
+          "name": "No innerHTML with dynamic content",
+          "check_type": "static",
+          "pattern": "\\.innerHTML\\s*=\\s*[^=]",
+          "severity": "major",
+          "description": "Setting innerHTML with dynamic content enables XSS."
+        },
+        {
+          "id": "SEC-006",
+          "name": "No insecure HTTP for sensitive endpoints",
+          "check_type": "static",
+          "pattern": "http://(?!localhost|127\\.0\\.0\\.1|0\\.0\\.0\\.0)",
+          "severity": "major",
+          "description": "Sensitive API calls must use HTTPS."
+        },
+        {
+          "id": "SEC-007",
+          "name": "Signature verification",
+          "check_type": "llm",
+          "severity": "critical",
+          "description": "All signature verification and assertion validation must be performed correctly."
+        },
+        {
+          "id": "SEC-008",
+          "name": "No nonce reuse",
+          "check_type": "llm",
+          "severity": "critical",
+          "description": "Cryptographic nonces must never be reused. In MuSig2, nonce reuse leaks private keys."
+        },
+        {
+          "id": "SEC-009",
+          "name": "Sandbox WebView/iframe content",
+          "check_type": "llm",
+          "severity": "major",
+          "description": "WebView and iframe content must be sandboxed by default."
+        },
+        {
+          "id": "SEC-010",
+          "name": "Missing zeroization of sensitive data",
+          "check_type": "llm",
+          "severity": "major",
+          "description": "Sensitive Uint8Array (seeds, keys, nonces) must be wiped after use. Leaving them in memory increases exposure window."
+        }
+      ]
+    },
+    "ota_native_boundary": {
+      "weight": 0.06,
+      "hard_gate": false,
+      "source_frequency": 2.4,
+      "source_count": 96,
+      "description": "OTA updates cannot change native modules. Code that calls native modules not present in the current binary must be gated or have fallbacks.",
+      "rules": [
+        {
+          "id": "OTA-001",
+          "name": "Native module call in OTA-shippable code",
+          "check_type": "llm",
+          "severity": "critical",
+          "description": "OTA updates cannot change native modules. Code that calls native modules not present in the current binary must be gated or have fallbacks."
+        },
+        {
+          "id": "OTA-002",
+          "name": "Fingerprint compatibility check",
+          "check_type": "llm",
+          "severity": "major",
+          "description": "Code must check the binary fingerprint before calling native APIs that may not exist in older versions."
+        }
+      ]
+    },
+    "error_handling": {
+      "weight": 0.06,
+      "hard_gate": false,
+      "source_frequency": 2.4,
+      "source_count": 94,
+      "description": "Error propagation, rethrowing, error boundaries, non-transient failure handling.",
+      "rules": [
+        {
+          "id": "ERR-001",
+          "name": "No silent catch blocks",
+          "check_type": "static",
+          "pattern": "catch\\s*\\([^)]*\\)\\s*\\{\\s*\\}",
+          "severity": "major",
+          "description": "Empty catch blocks swallow errors silently. At minimum, log the error."
+        },
+        {
+          "id": "ERR-002",
+          "name": "Error propagation",
+          "check_type": "llm",
+          "severity": "major",
+          "description": "Errors from critical operations must be propagated to the caller or surfaced to the user, not swallowed."
+        },
+        {
+          "id": "ERR-003",
+          "name": "Non-transient failure handling",
+          "check_type": "llm",
+          "severity": "major",
+          "description": "Non-transient failures (e.g., invalid input, permission denied) must not be retried indefinitely. Distinguish from transient failures (network timeout)."
+        }
+      ]
+    },
+    "data_integrity": {
+      "weight": 0.06,
+      "hard_gate": true,
+      "source_frequency": 1.8,
+      "source_count": 70,
+      "description": "Address source consistency, no silent downgrades, stale armed results, fatal operations, deduplication.",
+      "rules": [
+        {
+          "id": "DATA-001",
+          "name": "Unify address sources",
+          "check_type": "llm",
+          "severity": "major",
+          "description": "When multiple integrations need a default address, they must use a unified source. Divergent sources cause funds to be sent to wrong addresses."
+        },
+        {
+          "id": "DATA-002",
+          "name": "No silent storage downgrade",
+          "check_type": "llm",
+          "severity": "major",
+          "description": "Storage operations must not silently downgrade from persistent to volatile."
+        },
+        {
+          "id": "DATA-003",
+          "name": "Clear stale armed results",
+          "check_type": "llm",
+          "severity": "major",
+          "description": "Starting a new async operation must clear stale results from previous runs."
+        },
+        {
+          "id": "DATA-004",
+          "name": "Make failed critical operations fatal",
+          "check_type": "llm",
+          "severity": "major",
+          "description": "Critical operations like IBAN moves must be fatal on failure."
+        },
+        {
+          "id": "DATA-005",
+          "name": "Deduplicate sync requests",
+          "check_type": "llm",
+          "severity": "major",
+          "description": "Repeated sync requests must be deduplicated to prevent duplicate state writes."
+        }
+      ]
+    },
+    "timeout_retry": {
+      "weight": 0.04,
+      "hard_gate": false,
+      "source_frequency": 1.6,
+      "source_count": 65,
+      "description": "Timeout handling, backoff strategies, retry logic, transient vs non-transient failures.",
+      "rules": [
+        {
+          "id": "TIMEOUT-001",
+          "name": "Preserve timeout backoff on failures",
+          "check_type": "llm",
+          "severity": "major",
+          "description": "When boarding reads fail, the timeout backoff must be preserved, not reset. Resetting causes retry storms."
+        },
+        {
+          "id": "TIMEOUT-002",
+          "name": "Re-throw non-transient failures",
+          "check_type": "llm",
+          "severity": "major",
+          "description": "Non-transient boarding failures must be re-thrown, not swallowed or treated as transient."
+        }
+      ]
+    },
+    "dead_code": {
+      "weight": 0.03,
+      "hard_gate": false,
+      "source_frequency": 1.6,
+      "source_count": 62,
+      "description": "Unused imports, unreachable branches, orphaned code, duplicate logic.",
+      "rules": [
+        {
+          "id": "DEAD-001",
+          "name": "No dead code or unused imports",
+          "check_type": "llm",
+          "severity": "minor",
+          "description": "Unused imports and dead code should be removed."
+        },
+        {
+          "id": "DEAD-002",
+          "name": "No unreachable branches",
+          "check_type": "llm",
+          "severity": "minor",
+          "description": "Code after unconditional returns or throws is unreachable."
+        }
+      ]
+    },
+    "silent_catch": {
+      "weight": 0.04,
+      "hard_gate": false,
+      "source_frequency": 1.4,
+      "source_count": 55,
+      "description": "Empty catch blocks, void on promises, ignored errors. NOTE: ERR-001 in error_handling already checks for empty catch blocks with the same regex. CATCH-001 is moved to LLM to avoid double-penalizing. CATCH-002 (void on promises) is a distinct check.",
+      "rules": [
+        {
+          "id": "CATCH-001",
+          "name": "Silent catch (LLM check for context)",
+          "check_type": "llm",
+          "severity": "major",
+          "description": "Empty catch blocks that swallow errors. The static check is in error_handling/ERR-001. This LLM rule catches cases where the catch block has code but still swallows errors (e.g., catch but only logs, doesn't propagate)."
+        },
+        {
+          "id": "CATCH-002",
+          "name": "No void on rejecting promises",
+          "check_type": "static",
+          "pattern": "\\bvoid\\s+\\w+\\(",
+          "severity": "major",
+          "description": "Using `void` before a function that returns a promise swallows rejections."
+        }
+      ]
+    },
+    "accessibility": {
+      "weight": 0.04,
+      "hard_gate": false,
+      "source_frequency": 1.3,
+      "source_count": 52,
+      "description": "Missing aria, blocked zoom, removed focus states, keyboard navigation.",
+      "rules": [
+        {
+          "id": "A11Y-001",
+          "name": "Visible focus state",
+          "check_type": "static",
+          "pattern": "outline\\s*:\\s*(none|0)",
+          "severity": "minor",
+          "description": "Removing :focus and :focus-visible outlines leaves keyboard users without navigation indicators."
+        },
+        {
+          "id": "A11Y-002",
+          "name": "Don't disable browser zoom",
+          "check_type": "static",
+          "pattern": "maximum-scale\\s*=\\s*[01]|user-scalable\\s*=\\s*(no|0|false)",
+          "severity": "major",
+          "description": "Disabling browser zoom violates WCAG 1.4.4."
+        },
+        {
+          "id": "A11Y-003",
+          "name": "ARIA labels on interactive elements",
+          "check_type": "llm",
+          "severity": "minor",
+          "description": "Interactive elements (buttons, links, inputs) need accessible names via aria-label or visible text."
+        }
+      ]
+    },
+    "documentation": {
+      "weight": 0.02,
+      "hard_gate": false,
+      "source_frequency": 1.3,
+      "source_count": 50,
+      "description": "Missing docs, missing inline comments, markdownlint violations.",
+      "rules": [
+        {
+          "id": "DOC-001",
+          "name": "Label code fences in docs",
+          "check_type": "llm",
+          "severity": "nitpick",
+          "description": "Code fences in markdown should have a language label."
+        },
+        {
+          "id": "DOC-002",
+          "name": "Document complex logic",
+          "check_type": "llm",
+          "severity": "minor",
+          "description": "Complex logic, crypto operations, and state machines need inline comments explaining the why."
+        }
+      ]
+    },
+    "missing_validation": {
+      "weight": 0.03,
+      "hard_gate": false,
+      "source_frequency": 1.2,
+      "source_count": 47,
+      "description": "Missing runtime type checks at external boundaries, unvalidated user input.",
+      "rules": [
+        {
+          "id": "VALID-001",
+          "name": "Runtime validation at external boundaries",
+          "check_type": "llm",
+          "severity": "major",
+          "description": "Data from external sources (API responses, user input, IPC) must be validated at the boundary before use."
+        },
+        {
+          "id": "VALID-002",
+          "name": "Per-item validation in arrays",
+          "check_type": "llm",
+          "severity": "major",
+          "description": "Arrays from external sources must have per-item validation, not just type checks on the array itself."
+        }
+      ]
+    },
+    "webview_sandbox": {
+      "weight": 0.03,
+      "hard_gate": false,
+      "source_frequency": 1.2,
+      "source_count": 46,
+      "description": "Sandbox attributes, CSP headers, origin restrictions on WebView and iframe.",
+      "rules": [
+        {
+          "id": "SANDBOX-001",
+          "name": "Sandbox iframe content",
+          "check_type": "llm",
+          "severity": "major",
+          "description": "WebView and iframe content must be sandboxed by default with appropriate sandbox attributes."
+        },
+        {
+          "id": "SANDBOX-002",
+          "name": "Content Security Policy",
+          "check_type": "llm",
+          "severity": "major",
+          "description": "CSP headers must restrict script sources and prevent inline script execution."
+        }
+      ]
+    },
+    "state_management": {
+      "weight": 0.03,
+      "hard_gate": false,
+      "source_frequency": 1.0,
+      "source_count": 41,
+      "description": "State synchronization, batch updates, context provider issues, infinite loops.",
+      "rules": [
+        {
+          "id": "STATE-001",
+          "name": "No recursive resolveRequest",
+          "check_type": "llm",
+          "severity": "critical",
+          "description": "Calling context.resolveRequest recursively inside a custom resolveRequest causes infinite loops (Maximum call stack size exceeded)."
+        },
+        {
+          "id": "STATE-002",
+          "name": "State synchronization",
+          "check_type": "llm",
+          "severity": "major",
+          "description": "Multiple state sources (local state, context, server) must be synchronized to prevent inconsistent UI."
+        }
+      ]
+    },
+    "performance": {
+      "weight": 0.02,
+      "hard_gate": false,
+      "source_frequency": 0.9,
+      "source_count": 36,
+      "description": "Unnecessary initialization, memory leaks, render optimization, bundle size.",
+      "rules": [
+        {
+          "id": "PERF-001",
+          "name": "Don't initialize expensive resources on every call",
+          "check_type": "llm",
+          "severity": "major",
+          "description": "Expensive initializations should be cached or lazy-loaded."
+        },
+        {
+          "id": "PERF-002",
+          "name": "No memory leaks in event listeners",
+          "check_type": "static",
+          "pattern": "addEventListener\\s*\\(",
+          "severity": "minor",
+          "description": "Event listeners must be cleaned up in useEffect return."
+        }
+      ]
+    },
+    "naming_convention": {
+      "weight": 0.02,
+      "hard_gate": false,
+      "source_frequency": 0.9,
+      "source_count": 36,
+      "description": "Variable, function, and component naming.",
+      "rules": [
+        {
+          "id": "NAME-001",
+          "name": "Clear naming",
+          "check_type": "llm",
+          "severity": "minor",
+          "description": "Names should be descriptive and not misleading."
+        }
+      ]
+    },
+    "preserve_behavior": {
+      "weight": 0.02,
+      "hard_gate": false,
+      "source_frequency": 0.9,
+      "source_count": 35,
+      "description": "Preserving existing behavior when refactoring, avoiding breaking changes.",
+      "rules": [
+        {
+          "id": "PRES-001",
+          "name": "Don't break existing behavior",
+          "check_type": "llm",
+          "severity": "major",
+          "description": "Refactors must preserve existing behavior. Don't close sends before a tx is submitted, don't remove fallback paths without replacement."
+        }
+      ]
+    },
+    "balance_sync": {
+      "weight": 0.02,
+      "hard_gate": false,
+      "source_frequency": 0.8,
+      "source_count": 30,
+      "description": "Balance display mismatches, stale balance updates.",
+      "rules": [
+        {
+          "id": "BAL-001",
+          "name": "Balance display matches actual state",
+          "check_type": "llm",
+          "severity": "major",
+          "description": "Displayed balance must match the actual on-chain/server state. Stale balances cause users to make incorrect decisions."
+        }
+      ]
+    },
+    "type_safety": {
+      "weight": 0.02,
+      "hard_gate": false,
+      "source_frequency": 0.7,
+      "source_count": 29,
+      "description": "Type casts, enum correctness, TypeScript strictness.",
+      "rules": [
+        {
+          "id": "TYPE-001",
+          "name": "No unsafe type casts",
+          "check_type": "llm",
+          "severity": "minor",
+          "description": "Avoid `as any` and unsafe type casts. Use proper type guards."
+        },
+        {
+          "id": "TYPE-002",
+          "name": "Correct enum usage",
+          "check_type": "llm",
+          "severity": "major",
+          "description": "Enum values must match the actual library API. Example: BIOMETRIC_STRONG doesn't exist in expo-local-authentication."
+        }
+      ]
+    },
+    "user_verification": {
+      "weight": 0.02,
+      "hard_gate": false,
+      "source_frequency": 0.5,
+      "source_count": 20,
+      "description": "Missing user verification (UV) on passkey operations, biometric prompt issues.",
+      "rules": [
+        {
+          "id": "UV-001",
+          "name": "User verification on passkey operations",
+          "check_type": "llm",
+          "severity": "major",
+          "description": "Passkey signing operations must require user verification (UV). Missing UV allows signing without biometric/PIN."
+        }
+      ]
+    },
+    "api_correctness": {
+      "weight": 0.02,
+      "hard_gate": false,
+      "source_frequency": 0.5,
+      "source_count": 19,
+      "description": "Wrong API usage, missing interfaces, incorrect HTTP attributes.",
+      "rules": [
+        {
+          "id": "API-001",
+          "name": "Implement required interfaces",
+          "check_type": "llm",
+          "severity": "critical",
+          "description": "WebView shims must implement all required interfaces like injectedJavaScriptObject. Missing interfaces cause runtime crashes."
+        },
+        {
+          "id": "API-002",
+          "name": "Handle URL objects in interceptors",
+          "check_type": "llm",
+          "severity": "major",
+          "description": "Fetch and XMLHttpRequest interceptors must handle URL objects, not just strings."
+        },
+        {
+          "id": "API-003",
+          "name": "Correct HTML attributes",
+          "check_type": "llm",
+          "severity": "minor",
+          "description": "In raw HTML files, use http-equiv not camelCase React JSX props."
+        }
+      ]
+    },
+    "incomplete_cleanup": {
+      "weight": 0.01,
+      "hard_gate": false,
+      "source_frequency": 0.3,
+      "source_count": 12,
+      "description": "Incomplete wipes, orphaned entries, partial sweeps.",
+      "rules": [
+        {
+          "id": "CLEAN-001",
+          "name": "Complete keychain wipe",
+          "check_type": "llm",
+          "severity": "major",
+          "description": "wipeAllKeychainData must remove ALL aliased entries, not just the primary key."
+        },
+        {
+          "id": "CLEAN-002",
+          "name": "Sweep all items, not just first",
+          "check_type": "llm",
+          "severity": "major",
+          "description": "Sweep operations must process all items, not just the first match."
+        }
+      ]
+    },
+    "localstorage_secret": {
+      "weight": 0.01,
+      "hard_gate": true,
+      "source_frequency": 0.1,
+      "source_count": 2,
+      "description": "Keys, seeds, or credentials in localStorage. Rare but catastrophic. Hard gate because even one instance is unacceptable. NOTE: SEC-001 in security_crypto already checks this with the same regex — this category exists as a separate hard gate to ensure the penalty is applied even if security_crypto weight is reduced.",
+      "rules": [
+        {
+          "id": "LS-001",
+          "name": "No private keys in localStorage (duplicate hard gate)",
+          "check_type": "llm",
+          "severity": "critical",
+          "description": "Duplicate of SEC-001 — kept as LLM rule to avoid double-penalizing with the same regex. The static check is in security_crypto/SEC-001. This LLM rule catches cases the regex misses (e.g., indirect localStorage access via wrapper functions)."
+        }
+      ]
+    }
+  },
+  "severity_weights": {
+    "critical": 3.0,
+    "major": 2.0,
+    "minor": 1.0,
+    "nitpick": 0.25
+  },
+  "scoring": {
+    "max_score": 100,
+    "pass_threshold": 70,
+    "hard_gate_fail_score": 0,
+    "description": "Each category scored 0-100. Final = weighted sum. Hard gate categories with critical violations get score 0. Below pass_threshold = reject."
+  }
+}

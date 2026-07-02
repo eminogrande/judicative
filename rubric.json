@@ -1,0 +1,331 @@
+{
+  "$schema": "judicative-rubric-v1",
+  "description": "Judging rubric for coding-task solutions, derived from 101 structured review findings across the nuri-com organization (non-custodial Bitcoin/Lightning wallet). Weights reflect that a single crypto/security mistake can be catastrophic.",
+  "version": "1.0.0",
+  "categories": {
+    "security_and_privacy": {
+      "weight": 0.40,
+      "hard_gate": true,
+      "description": "Key material handling, cryptographic correctness, attack surface reduction, data exposure",
+      "rules": [
+        {
+          "id": "SEC-001",
+          "name": "No private keys in localStorage",
+          "check_type": "static",
+          "pattern": "localStorage\\.(setItem|getItem)\\s*\\([^)]*\\b(key|seed|mnemonic|private|secret|credential|passkey|password|wallet)\\b",
+          "severity": "critical",
+          "description": "Persisting private keys, seeds, mnemonics, or credentials in localStorage breaks the security boundary. localStorage is accessible to any JS running on the same origin, including XSS payloads."
+        },
+        {
+          "id": "SEC-002",
+          "name": "No hardcoded secrets or host inventory",
+          "check_type": "static",
+          "pattern": "(password|api_key|secret|token|mnemonic|seed)\\s*[:=]\\s*['\"][^'\"]{8,}['\"]",
+          "severity": "critical",
+          "description": "Hardcoded secrets, API keys, host inventories, or operator details in source code or docs must never be committed."
+        },
+        {
+          "id": "SEC-003",
+          "name": "No Math.random for cryptographic operations",
+          "check_type": "static",
+          "pattern": "Math\\.random\\s*\\(",
+          "severity": "critical",
+          "description": "Math.random() is not cryptographically secure. Use crypto.getRandomValues() or the appropriate platform API for nonces, salts, and key generation."
+        },
+        {
+          "id": "SEC-004",
+          "name": "Sandbox WebView/iframe content",
+          "check_type": "llm",
+          "severity": "major",
+          "description": "WebView and iframe content must be sandboxed by default. Check for sandbox attributes, CSP headers, and restricted origins."
+        },
+        {
+          "id": "SEC-005",
+          "name": "Disable unnecessary PRF output",
+          "check_type": "llm",
+          "severity": "major",
+          "description": "PRF (Pseudo-Random Function) output from passkeys should only be requested when actually needed. Paths that only carry assertions should not request PRF output."
+        },
+        {
+          "id": "SEC-006",
+          "name": "Complete keychain wipe on logout",
+          "check_type": "llm",
+          "severity": "major",
+          "description": "wipeAllKeychainData() and similar cleanup functions must remove ALL aliased entries, not just the primary key. Incomplete wipes leave orphaned credentials."
+        },
+        {
+          "id": "SEC-007",
+          "name": "No silent key-storage downgrade",
+          "check_type": "llm",
+          "severity": "major",
+          "description": "Key storage must not silently downgrade from persistent secure storage to a volatile in-memory cache. If secure storage fails, the user must be informed."
+        },
+        {
+          "id": "SEC-008",
+          "name": "No eval() or Function() constructor",
+          "check_type": "static",
+          "pattern": "\\beval\\s*\\(|new\\s+Function\\s*\\(",
+          "severity": "critical",
+          "description": "eval() and new Function() execute arbitrary strings as code, enabling injection attacks."
+        },
+        {
+          "id": "SEC-009",
+          "name": "No innerHTML with dynamic content",
+          "check_type": "static",
+          "pattern": "\\.innerHTML\\s*=\\s*[^=]",
+          "severity": "major",
+          "description": "Setting innerHTML with dynamic content enables XSS. Use textContent, createElement, or a sanitization library. Matches innerHTML = (anything except ===), including string literals which may contain dynamic concatenation."
+        },
+        {
+          "id": "SEC-010",
+          "name": "No insecure HTTP for sensitive endpoints",
+          "check_type": "static",
+          "pattern": "http://(?!localhost|127\\.0\\.0\\.1|0\\.0\\.0\\.0)",
+          "severity": "major",
+          "description": "Sensitive API calls must use HTTPS. HTTP connections are vulnerable to MITM attacks."
+        },
+        {
+          "id": "SEC-011",
+          "name": "Verify signatures and assertions",
+          "check_type": "llm",
+          "severity": "critical",
+          "description": "All signature verification, assertion validation, and challenge checking must be performed correctly. Missing or incorrect verification allows forgery."
+        },
+        {
+          "id": "SEC-012",
+          "name": "No nonce reuse",
+          "check_type": "llm",
+          "severity": "critical",
+          "description": "Cryptographic nonces must never be reused. In MuSig2 and signing operations, nonce reuse leaks private keys."
+        }
+      ]
+    },
+    "functional_correctness": {
+      "weight": 0.25,
+      "hard_gate": false,
+      "description": "Does the solution actually solve the issue? Correct API usage, error handling, edge cases, accessibility",
+      "rules": [
+        {
+          "id": "FUNC-001",
+          "name": "Correct enum and API constant usage",
+          "check_type": "llm",
+          "severity": "major",
+          "description": "Enum values must match the actual library API. Example: LocalAuthentication.SecurityLevel.BIOMETRIC (not BIOMETRIC_STRONG which doesn't exist in expo-local-authentication)."
+        },
+        {
+          "id": "FUNC-002",
+          "name": "No silent catch blocks",
+          "check_type": "static",
+          "pattern": "catch\\s*\\([^)]*\\)\\s*\\{\\s*\\}",
+          "severity": "major",
+          "description": "Empty catch blocks swallow errors silently. At minimum, log the error so failures are diagnosable."
+        },
+        {
+          "id": "FUNC-003",
+          "name": "Optional chaining for nullable callbacks",
+          "check_type": "static",
+          "pattern": "\\b(onError|onSuccess|onFailure|onComplete|callback|handler|resolve|reject)\\s*\\(\\s*[^)]*\\s*\\)\\s*;?(?!.*\\?\\.)",
+          "severity": "minor",
+          "description": "Callbacks that may be undefined must use optional chaining (?.) to avoid runtime TypeError. Example: onError?.() not onError(). Only flags known callback names to avoid false positives."
+        },
+        {
+          "id": "FUNC-004",
+          "name": "Handle URL objects in fetch/XHR interceptors",
+          "check_type": "llm",
+          "severity": "major",
+          "description": "Fetch and XMLHttpRequest interceptors must handle URL objects, not just strings. Passing new URL(...) to an interceptor that only handles strings causes CORS bypass or request failure."
+        },
+        {
+          "id": "FUNC-005",
+          "name": "Visible focus state for keyboard navigation",
+          "check_type": "static",
+          "pattern": "outline\\s*:\\s*(none|0)",
+          "severity": "minor",
+          "description": "Removing :focus and :focus-visible outlines leaves keyboard users without navigation indicators. Provide an alternative visible focus style."
+        },
+        {
+          "id": "FUNC-006",
+          "name": "Don't disable browser zoom",
+          "check_type": "static",
+          "pattern": "maximum-scale\\s*=\\s*[01]|user-scalable\\s*=\\s*(no|0|false)",
+          "severity": "major",
+          "description": "Disabling browser zoom violates accessibility guidelines (WCAG 1.4.4). Users with visual impairments need zoom."
+        },
+        {
+          "id": "FUNC-007",
+          "name": "Implement required WebView interfaces",
+          "check_type": "llm",
+          "severity": "critical",
+          "description": "WebView shims must implement all required interfaces like injectedJavaScriptObject. Missing interfaces cause runtime crashes in dependent code."
+        },
+        {
+          "id": "FUNC-008",
+          "name": "Clear stale state on new operations",
+          "check_type": "llm",
+          "severity": "major",
+          "description": "Starting a new async operation must clear stale results from previous runs. Stale armed results, cached responses, or pending states cause incorrect behavior."
+        },
+        {
+          "id": "FUNC-009",
+          "name": "No OTA-incompatible native module calls",
+          "check_type": "llm",
+          "severity": "critical",
+          "description": "OTA updates cannot change native modules. Code that calls native modules not present in the current binary must be gated or have fallbacks."
+        }
+      ]
+    },
+    "data_integrity": {
+      "weight": 0.20,
+      "hard_gate": true,
+      "description": "Data consistency, integration correctness, state synchronization, no silent downgrades",
+      "rules": [
+        {
+          "id": "DATA-001",
+          "name": "Unify address sources across integrations",
+          "check_type": "llm",
+          "severity": "major",
+          "description": "When multiple integrations (Monerium, Arkade, Gnosis) need a default address, they must use a unified source. Divergent address sources cause funds to be sent to wrong addresses."
+        },
+        {
+          "id": "DATA-002",
+          "name": "No silent storage downgrade",
+          "check_type": "llm",
+          "severity": "major",
+          "description": "Storage operations must not silently downgrade from persistent to volatile. If persistent storage fails, surface the error to the user."
+        },
+        {
+          "id": "DATA-003",
+          "name": "Clear stale armed results",
+          "check_type": "llm",
+          "severity": "major",
+          "description": "When starting a new receive-claim prefetch or similar operation, clear stale armed results from previous runs."
+        },
+        {
+          "id": "DATA-004",
+          "name": "Make failed critical operations fatal",
+          "check_type": "llm",
+          "severity": "major",
+          "description": "Critical operations like IBAN moves must be fatal on failure. A failed move must not allow the migration to advance to the next step."
+        },
+        {
+          "id": "DATA-005",
+          "name": "Deduplicate sync requests",
+          "check_type": "llm",
+          "severity": "major",
+          "description": "Repeated sync requests (e.g., Arkade receive sync) must be deduplicated to prevent duplicate state writes and race conditions."
+        }
+      ]
+    },
+    "performance": {
+      "weight": 0.05,
+      "hard_gate": false,
+      "description": "Resource efficiency, unnecessary initialization, memory leaks, render optimization",
+      "rules": [
+        {
+          "id": "PERF-001",
+          "name": "Don't initialize expensive resources on every call",
+          "check_type": "llm",
+          "severity": "major",
+          "description": "Expensive initializations (Arkade, crypto contexts, database connections) should be cached or lazy-loaded, not re-initialized on every operation."
+        },
+        {
+          "id": "PERF-002",
+          "name": "No memory leaks in event listeners",
+          "check_type": "static",
+          "pattern": "addEventListener\\s*\\(",
+          "severity": "minor",
+          "description": "Event listeners added in useEffect or component lifecycle must be cleaned up. Check for removeEventListener in cleanup."
+        },
+        {
+          "id": "PERF-003",
+          "name": "Memoize expensive computations",
+          "check_type": "llm",
+          "severity": "minor",
+          "description": "Expensive computations in render paths should be memoized with useMemo/useCallback to prevent unnecessary re-computation."
+        }
+      ]
+    },
+    "maintainability": {
+      "weight": 0.05,
+      "hard_gate": false,
+      "description": "Code quality, naming, documentation, dead code, lint compliance",
+      "rules": [
+        {
+          "id": "MAINT-001",
+          "name": "No dead code or unused imports",
+          "check_type": "llm",
+          "severity": "minor",
+          "description": "Unused imports and dead code should be removed. Check that all imported symbols are used. Requires LLM analysis — regex cannot reliably detect unused imports without cross-referencing."
+        },
+        {
+          "id": "MAINT-002",
+          "name": "Label code fences in docs",
+          "check_type": "llm",
+          "severity": "nitpick",
+          "description": "Code fences in markdown docs should have a language label (e.g., ```nginx, ```typescript) for syntax highlighting and lint compliance. Regex cannot distinguish opening from closing fences, so this requires LLM analysis."
+        },
+        {
+          "id": "MAINT-003",
+          "name": "Use approved design system colors",
+          "check_type": "llm",
+          "severity": "minor",
+          "description": "Colors should come from the approved design system, not hardcoded hex values."
+        },
+        {
+          "id": "MAINT-004",
+          "name": "No duplicate code blocks",
+          "check_type": "llm",
+          "severity": "minor",
+          "description": "Duplicated logic should be extracted into shared functions or components."
+        },
+        {
+          "id": "MAINT-005",
+          "name": "Fix markdownlint violations",
+          "check_type": "llm",
+          "severity": "nitpick",
+          "description": "Markdown docs should pass markdownlint (MD040: fenced code blocks should have a language). Moved to LLM — regex cannot distinguish opening from closing fences."
+        }
+      ]
+    },
+    "completeness": {
+      "weight": 0.05,
+      "hard_gate": false,
+      "description": "Did the solution address all requirements from the issue? Did it introduce regressions?",
+      "rules": [
+        {
+          "id": "COMP-001",
+          "name": "Addresses all issue requirements",
+          "check_type": "llm",
+          "severity": "major",
+          "description": "The solution must address every requirement listed in the issue. Partial solutions are scored lower."
+        },
+        {
+          "id": "COMP-002",
+          "name": "No regressions introduced",
+          "check_type": "llm",
+          "severity": "major",
+          "description": "The solution must not break existing functionality. Check for removed features, changed APIs, or broken integrations."
+        },
+        {
+          "id": "COMP-003",
+          "name": "Includes tests for new functionality",
+          "check_type": "llm",
+          "severity": "minor",
+          "description": "New functionality should include test coverage. Missing tests for critical paths is a minor penalty."
+        }
+      ]
+    }
+  },
+  "severity_weights": {
+    "critical": 3.0,
+    "major": 2.0,
+    "minor": 1.0,
+    "nitpick": 0.25
+  },
+  "scoring": {
+    "max_score": 100,
+    "pass_threshold": 70,
+    "hard_gate_fail_score": 0,
+    "description": "Each category is scored 0-100. Final score = weighted sum of category scores. Any hard_gate category with a critical violation gets score 0 for that category. Below pass_threshold = reject."
+  }
+}
