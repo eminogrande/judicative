@@ -1,0 +1,1415 @@
+{
+  "rubric_version": "2.1.0",
+  "score_model": "global-penalty-v2",
+  "mode": "static+external-judge",
+  "issue": "Title: Implement a secure key storage module for the Nuri wallet\n\nDescription:\nWe need a module that securely stores the wallet's signing key using the platform's\nsecure enclave / keychain. The module must:\n\n1. Generate a cryptographically secure random seed\n2. Store it in the platform keychain (NOT localStorage)\n3. Provide a wipe function that removes ALL keychain entries\n4. Handle errors gracefully \u2014 if storage fails, surface the error to the user\n5. Work in both React Native and PWA (web) con",
+  "results": [
+    {
+      "agent_id": "kimi-k2.7-code-run1",
+      "total_score": 56.38,
+      "total_penalty": 43.62,
+      "hard_gate_capped": false,
+      "verdict": "FAIL",
+      "files_analyzed": 1,
+      "lines_analyzed": 338,
+      "categories": {
+        "race_condition": {
+          "score": 68.0,
+          "weight": 0.18,
+          "emphasis": 2.0,
+          "raw_penalty": 8.0,
+          "global_penalty": 16.0,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "static_findings": 0,
+          "llm_assessments": 3,
+          "findings": [],
+          "llm_scores": [
+            {
+              "rule_id": "RACE-003",
+              "rule_name": "Async operation without cancellation",
+              "score": 1.0,
+              "explanation": "No long-lived async subscriptions or timers in this module; operations are one-shot promise-based storage calls. n/a"
+            },
+            {
+              "rule_id": "RACE-004",
+              "rule_name": "Missing AbortController for fetch",
+              "score": 1.0,
+              "explanation": "No fetch calls in this module. n/a"
+            },
+            {
+              "rule_id": "RACE-005",
+              "rule_name": "Concurrent state mutation",
+              "score": 0.6,
+              "explanation": "Uses withLock and inFlightCreate dedup, but inFlightCreate is not itself guarded by the lock during assignment; two rapid calls could both see null and each create a separate Promise that the lock sti"
+            }
+          ]
+        },
+        "stale_state": {
+          "score": 100.0,
+          "weight": 0.15,
+          "emphasis": 2.0,
+          "raw_penalty": 0.0,
+          "global_penalty": 0.0,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "static_findings": 0,
+          "llm_assessments": 3,
+          "findings": [],
+          "llm_scores": [
+            {
+              "rule_id": "STALE-002",
+              "rule_name": "Cached data used after async gap",
+              "score": 1.0,
+              "explanation": "No cached data reused across awaits except DB handle, which is opened once. n/a"
+            },
+            {
+              "rule_id": "STALE-003",
+              "rule_name": "Ghost balance display",
+              "score": 1.0,
+              "explanation": "No balance display in this module. n/a"
+            },
+            {
+              "rule_id": "STALE-004",
+              "rule_name": "Missing refetch on focus/reconnect",
+              "score": 1.0,
+              "explanation": "No server-poll data in this module. n/a"
+            }
+          ]
+        },
+        "ui_component": {
+          "score": 100.0,
+          "weight": 0.08,
+          "emphasis": 1.68,
+          "raw_penalty": 0.0,
+          "global_penalty": 0.0,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "static_findings": 0,
+          "llm_assessments": 3,
+          "findings": [],
+          "llm_scores": [
+            {
+              "rule_id": "UI-001",
+              "rule_name": "Modal layer isolation",
+              "score": 1.0,
+              "explanation": "No UI/modal code. n/a"
+            },
+            {
+              "rule_id": "UI-002",
+              "rule_name": "Back handler on layers",
+              "score": 1.0,
+              "explanation": "No back-button handling. n/a"
+            },
+            {
+              "rule_id": "UI-003",
+              "rule_name": "Component prop correctness",
+              "score": 1.0,
+              "explanation": "No component props. n/a"
+            }
+          ]
+        },
+        "architecture": {
+          "score": 97.6,
+          "weight": 0.08,
+          "emphasis": 1.68,
+          "raw_penalty": 0.6,
+          "global_penalty": 1.01,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "static_findings": 0,
+          "llm_assessments": 3,
+          "findings": [],
+          "llm_scores": [
+            {
+              "rule_id": "ARCH-001",
+              "rule_name": "Circular dependency",
+              "score": 1.0,
+              "explanation": "No circular imports. n/a"
+            },
+            {
+              "rule_id": "ARCH-002",
+              "rule_name": "Separation of concerns",
+              "score": 0.9,
+              "explanation": "Clean separation between web and native backends; only minor quibble is web/native branches are selected by Platform.OS inline rather than via a pluggable backend interface."
+            },
+            {
+              "rule_id": "ARCH-003",
+              "rule_name": "Module structure",
+              "score": 0.8,
+              "explanation": "Single file does many things: public API, native backend, web backend, mutex, base64 helpers, validation. Could be split into smaller modules."
+            }
+          ]
+        },
+        "code_style": {
+          "score": 99.2,
+          "weight": 0.05,
+          "emphasis": 1.05,
+          "raw_penalty": 0.2,
+          "global_penalty": 0.21,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "static_findings": 0,
+          "llm_assessments": 2,
+          "findings": [],
+          "llm_scores": [
+            {
+              "rule_id": "STYLE-001",
+              "rule_name": "ESLint compliance",
+              "score": 0.9,
+              "explanation": "Likely eslint-clean, but uses catch (_) which many linters flag."
+            },
+            {
+              "rule_id": "STYLE-002",
+              "rule_name": "Import ordering",
+              "score": 1.0,
+              "explanation": "Imports are minimal and grouped. n/a"
+            }
+          ]
+        },
+        "security_crypto": {
+          "score": 92.8,
+          "weight": 0.1,
+          "emphasis": 2.0,
+          "raw_penalty": 1.8,
+          "global_penalty": 3.6,
+          "hard_gate": true,
+          "hard_gate_triggered": false,
+          "static_findings": 0,
+          "llm_assessments": 4,
+          "findings": [],
+          "llm_scores": [
+            {
+              "rule_id": "SEC-007",
+              "rule_name": "Signature verification",
+              "score": 1.0,
+              "explanation": "No signature verification in this module. n/a"
+            },
+            {
+              "rule_id": "SEC-008",
+              "rule_name": "No nonce reuse",
+              "score": 1.0,
+              "explanation": "AES-GCM IV is fresh per encryption via getRandomValues; no nonce reuse risk. n/a"
+            },
+            {
+              "rule_id": "SEC-009",
+              "rule_name": "Sandbox WebView/iframe content",
+              "score": 1.0,
+              "explanation": "No WebView or iframe usage. n/a"
+            },
+            {
+              "rule_id": "SEC-010",
+              "rule_name": "Missing zeroization of sensitive data",
+              "score": 0.7,
+              "explanation": "Provides zeroize() and clears many Uint8Arrays, but the native base64 string copy and intermediate Array.from ciphertext/iv arrays cannot be zeroized; JS strings are immutable. Residual exposure remai"
+            }
+          ]
+        },
+        "ota_native_boundary": {
+          "score": 89.6,
+          "weight": 0.06,
+          "emphasis": 1.26,
+          "raw_penalty": 2.6,
+          "global_penalty": 3.27,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "static_findings": 0,
+          "llm_assessments": 2,
+          "findings": [],
+          "llm_scores": [
+            {
+              "rule_id": "OTA-001",
+              "rule_name": "Native module call in OTA-shippable code",
+              "score": 0.9,
+              "explanation": "SecureStore is statically imported and asserted via isAvailableAsync() before use, but the static import still assumes the module is present in the bundle. Good but not perfect for OTA boundaries."
+            },
+            {
+              "rule_id": "OTA-002",
+              "rule_name": "Fingerprint compatibility check",
+              "score": 0.9,
+              "explanation": "Calls SecureStore.isAvailableAsync() before every native operation; still relies on the module being present at import time."
+            }
+          ]
+        },
+        "error_handling": {
+          "score": 68.8,
+          "weight": 0.06,
+          "emphasis": 1.26,
+          "raw_penalty": 7.8,
+          "global_penalty": 9.81,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "static_findings": 1,
+          "llm_assessments": 2,
+          "findings": [
+            {
+              "rule_id": "ERR-001",
+              "rule_name": "No silent catch blocks",
+              "severity": "major",
+              "file": "lib/secureKeyStorage.ts",
+              "line": 278,
+              "match": "catch (_) {\n        \n      }"
+            }
+          ],
+          "llm_scores": [
+            {
+              "rule_id": "ERR-002",
+              "rule_name": "Error propagation",
+              "score": 0.9,
+              "explanation": "Errors are wrapped and re-thrown as KeyStorageError; callers receive them. Could include structured error codes for programmatic handling."
+            },
+            {
+              "rule_id": "ERR-003",
+              "rule_name": "Non-transient failure handling",
+              "score": 0.8,
+              "explanation": "Failures are thrown to caller; no retry/backoff for transient storage failures, but arguably storage failures are not transient."
+            }
+          ]
+        },
+        "data_integrity": {
+          "score": 90.4,
+          "weight": 0.06,
+          "emphasis": 1.26,
+          "raw_penalty": 2.4,
+          "global_penalty": 3.02,
+          "hard_gate": true,
+          "hard_gate_triggered": false,
+          "static_findings": 0,
+          "llm_assessments": 5,
+          "findings": [],
+          "llm_scores": [
+            {
+              "rule_id": "DATA-001",
+              "rule_name": "Unify address sources",
+              "score": 1.0,
+              "explanation": "No address derivation in this module. n/a"
+            },
+            {
+              "rule_id": "DATA-002",
+              "rule_name": "No silent storage downgrade",
+              "score": 1.0,
+              "explanation": "No silent downgrade to less-secure storage. n/a"
+            },
+            {
+              "rule_id": "DATA-003",
+              "rule_name": "Clear stale armed results",
+              "score": 1.0,
+              "explanation": "No armed results / pending state. n/a"
+            },
+            {
+              "rule_id": "DATA-004",
+              "rule_name": "Make failed critical operations fatal",
+              "score": 0.9,
+              "explanation": "createAndStoreSeed throws on failure and wipes partial state, which is correct. Minor: nested cleanup error is swallowed with catch (_)."
+            },
+            {
+              "rule_id": "DATA-005",
+              "rule_name": "Deduplicate sync requests",
+              "score": 0.7,
+              "explanation": "inFlightCreate dedups concurrent create calls, but loadSeed, wipeAllKeychainData and other operations are not deduped; concurrent load+wipe could race."
+            }
+          ]
+        },
+        "timeout_retry": {
+          "score": 100.0,
+          "weight": 0.04,
+          "emphasis": 0.84,
+          "raw_penalty": 0.0,
+          "global_penalty": 0.0,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "static_findings": 0,
+          "llm_assessments": 2,
+          "findings": [],
+          "llm_scores": [
+            {
+              "rule_id": "TIMEOUT-001",
+              "rule_name": "Preserve timeout backoff on failures",
+              "score": 1.0,
+              "explanation": "No timeout/retry logic in this module. n/a"
+            },
+            {
+              "rule_id": "TIMEOUT-002",
+              "rule_name": "Re-throw non-transient failures",
+              "score": 1.0,
+              "explanation": "No retry logic. n/a"
+            }
+          ]
+        },
+        "dead_code": {
+          "score": 100.0,
+          "weight": 0.03,
+          "emphasis": 0.63,
+          "raw_penalty": 0.0,
+          "global_penalty": 0.0,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "static_findings": 0,
+          "llm_assessments": 2,
+          "findings": [],
+          "llm_scores": [
+            {
+              "rule_id": "DEAD-001",
+              "rule_name": "No dead code or unused imports",
+              "score": 1.0,
+              "explanation": "No dead code or unused imports. n/a"
+            },
+            {
+              "rule_id": "DEAD-002",
+              "rule_name": "No unreachable branches",
+              "score": 1.0,
+              "explanation": "No unreachable branches. n/a"
+            }
+          ]
+        },
+        "silent_catch": {
+          "score": 83.2,
+          "weight": 0.04,
+          "emphasis": 0.84,
+          "raw_penalty": 4.2,
+          "global_penalty": 3.52,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "static_findings": 0,
+          "llm_assessments": 1,
+          "findings": [],
+          "llm_scores": [
+            {
+              "rule_id": "CATCH-001",
+              "rule_name": "Silent catch (LLM check for context)",
+              "score": 0.3,
+              "explanation": "catch (_) { // ignore nested cleanup errors } on line ~273 is a silent catch block; it swallows a real cleanup failure with only a comment. Static rule ERR-001 already caught it, and this LLM rule con"
+            }
+          ]
+        },
+        "accessibility": {
+          "score": 100.0,
+          "weight": 0.04,
+          "emphasis": 0.84,
+          "raw_penalty": 0.0,
+          "global_penalty": 0.0,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "static_findings": 0,
+          "llm_assessments": 1,
+          "findings": [],
+          "llm_scores": [
+            {
+              "rule_id": "A11Y-003",
+              "rule_name": "ARIA labels on interactive elements",
+              "score": 1.0,
+              "explanation": "No interactive elements. n/a"
+            }
+          ]
+        },
+        "documentation": {
+          "score": 98.4,
+          "weight": 0.02,
+          "emphasis": 0.5,
+          "raw_penalty": 0.4,
+          "global_penalty": 0.2,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "static_findings": 0,
+          "llm_assessments": 2,
+          "findings": [],
+          "llm_scores": [
+            {
+              "rule_id": "DOC-001",
+              "rule_name": "Label code fences in docs",
+              "score": 1.0,
+              "explanation": "No markdown docs. n/a"
+            },
+            {
+              "rule_id": "DOC-002",
+              "rule_name": "Document complex logic",
+              "score": 0.8,
+              "explanation": "Crypto and security model are documented in the header, but the failure-path cleanup reasoning could use an inline comment at the silent catch."
+            }
+          ]
+        },
+        "missing_validation": {
+          "score": 97.6,
+          "weight": 0.03,
+          "emphasis": 0.63,
+          "raw_penalty": 0.6,
+          "global_penalty": 0.38,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "static_findings": 0,
+          "llm_assessments": 2,
+          "findings": [],
+          "llm_scores": [
+            {
+              "rule_id": "VALID-001",
+              "rule_name": "Runtime validation at external boundaries",
+              "score": 0.9,
+              "explanation": "Asserts seed length on decode and validates web record shape; good. Minor: ciphertext array length check only ensures >=16, not tied to expected plaintext size."
+            },
+            {
+              "rule_id": "VALID-002",
+              "rule_name": "Per-item validation in arrays",
+              "score": 1.0,
+              "explanation": "No arrays of external items. n/a"
+            }
+          ]
+        },
+        "webview_sandbox": {
+          "score": 100.0,
+          "weight": 0.03,
+          "emphasis": 0.63,
+          "raw_penalty": 0.0,
+          "global_penalty": 0.0,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "static_findings": 0,
+          "llm_assessments": 2,
+          "findings": [],
+          "llm_scores": [
+            {
+              "rule_id": "SANDBOX-001",
+              "rule_name": "Sandbox iframe content",
+              "score": 1.0,
+              "explanation": "No iframe usage. n/a"
+            },
+            {
+              "rule_id": "SANDBOX-002",
+              "rule_name": "Content Security Policy",
+              "score": 1.0,
+              "explanation": "No CSP headers set here, but module docs mention CSP. n/a as not this module's responsibility."
+            }
+          ]
+        },
+        "state_management": {
+          "score": 100.0,
+          "weight": 0.03,
+          "emphasis": 0.63,
+          "raw_penalty": 0.0,
+          "global_penalty": 0.0,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "static_findings": 0,
+          "llm_assessments": 2,
+          "findings": [],
+          "llm_scores": [
+            {
+              "rule_id": "STATE-001",
+              "rule_name": "No recursive resolveRequest",
+              "score": 1.0,
+              "explanation": "No recursive state resolution. n/a"
+            },
+            {
+              "rule_id": "STATE-002",
+              "rule_name": "State synchronization",
+              "score": 1.0,
+              "explanation": "No shared mutable state except inFlightCreate and opChain, which are appropriately managed. n/a"
+            }
+          ]
+        },
+        "performance": {
+          "score": 97.6,
+          "weight": 0.02,
+          "emphasis": 0.5,
+          "raw_penalty": 0.6,
+          "global_penalty": 0.3,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "static_findings": 0,
+          "llm_assessments": 1,
+          "findings": [],
+          "llm_scores": [
+            {
+              "rule_id": "PERF-001",
+              "rule_name": "Don't initialize expensive resources on every call",
+              "score": 0.9,
+              "explanation": "IndexedDB connection is cached via dbPromise, but every operation still opens a new transaction and closes the db in finally. This re-opens/closes the connection each time despite caching."
+            }
+          ]
+        },
+        "naming_convention": {
+          "score": 100.0,
+          "weight": 0.02,
+          "emphasis": 0.5,
+          "raw_penalty": 0.0,
+          "global_penalty": 0.0,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "static_findings": 0,
+          "llm_assessments": 1,
+          "findings": [],
+          "llm_scores": [
+            {
+              "rule_id": "NAME-001",
+              "rule_name": "Clear naming",
+              "score": 1.0,
+              "explanation": "Names are clear and accurately describe behavior. n/a"
+            }
+          ]
+        },
+        "preserve_behavior": {
+          "score": 100.0,
+          "weight": 0.02,
+          "emphasis": 0.5,
+          "raw_penalty": 0.0,
+          "global_penalty": 0.0,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "static_findings": 0,
+          "llm_assessments": 1,
+          "findings": [],
+          "llm_scores": [
+            {
+              "rule_id": "PRES-001",
+              "rule_name": "Don't break existing behavior",
+              "score": 1.0,
+              "explanation": "No existing behavior to preserve. n/a"
+            }
+          ]
+        },
+        "balance_sync": {
+          "score": 100.0,
+          "weight": 0.02,
+          "emphasis": 0.5,
+          "raw_penalty": 0.0,
+          "global_penalty": 0.0,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "static_findings": 0,
+          "llm_assessments": 1,
+          "findings": [],
+          "llm_scores": [
+            {
+              "rule_id": "BAL-001",
+              "rule_name": "Balance display matches actual state",
+              "score": 1.0,
+              "explanation": "No balance display. n/a"
+            }
+          ]
+        },
+        "type_safety": {
+          "score": 99.2,
+          "weight": 0.02,
+          "emphasis": 0.5,
+          "raw_penalty": 0.2,
+          "global_penalty": 0.1,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "static_findings": 0,
+          "llm_assessments": 2,
+          "findings": [],
+          "llm_scores": [
+            {
+              "rule_id": "TYPE-001",
+              "rule_name": "No unsafe type casts",
+              "score": 0.9,
+              "explanation": "assertPlatform checks typeof Platform.OS but uses any for cause; minor. The Partial<WebSeedRecord> cast in validateWebRecord is a deliberate conservative cast after structural checks."
+            },
+            {
+              "rule_id": "TYPE-002",
+              "rule_name": "Correct enum usage",
+              "score": 1.0,
+              "explanation": "No enums in this module. n/a"
+            }
+          ]
+        },
+        "user_verification": {
+          "score": 90.4,
+          "weight": 0.02,
+          "emphasis": 0.5,
+          "raw_penalty": 2.4,
+          "global_penalty": 1.2,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "static_findings": 0,
+          "llm_assessments": 1,
+          "findings": [],
+          "llm_scores": [
+            {
+              "rule_id": "UV-001",
+              "rule_name": "User verification on passkey operations",
+              "score": 0.6,
+              "explanation": "Native path uses requireAuthentication: true. Web path has no user-verification gate because the web platform offers none for IndexedDB; documented honestly but still means any same-origin code can in"
+            }
+          ]
+        },
+        "api_correctness": {
+          "score": 92.0,
+          "weight": 0.02,
+          "emphasis": 0.5,
+          "raw_penalty": 2.0,
+          "global_penalty": 1.0,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "static_findings": 0,
+          "llm_assessments": 3,
+          "findings": [],
+          "llm_scores": [
+            {
+              "rule_id": "API-001",
+              "rule_name": "Implement required interfaces",
+              "score": 0.9,
+              "explanation": "Required functions (generateSeed, createAndStoreSeed, loadSeed, wipeAllKeychainData, zeroize) are exported; missing a formal interface type but matches task."
+            },
+            {
+              "rule_id": "API-002",
+              "rule_name": "Handle URL objects in interceptors",
+              "score": 1.0,
+              "explanation": "No URL interceptors. n/a"
+            },
+            {
+              "rule_id": "API-003",
+              "rule_name": "Correct HTML attributes",
+              "score": 1.0,
+              "explanation": "No HTML attributes. n/a"
+            }
+          ]
+        },
+        "incomplete_cleanup": {
+          "score": 100.0,
+          "weight": 0.01,
+          "emphasis": 0.5,
+          "raw_penalty": 0.0,
+          "global_penalty": 0.0,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "static_findings": 0,
+          "llm_assessments": 2,
+          "findings": [],
+          "llm_scores": [
+            {
+              "rule_id": "CLEAN-001",
+              "rule_name": "Complete keychain wipe",
+              "score": 1.0,
+              "explanation": "wipeAllKeychainData deletes all aliases and clears IndexedDB. n/a"
+            },
+            {
+              "rule_id": "CLEAN-002",
+              "rule_name": "Sweep all items, not just first",
+              "score": 1.0,
+              "explanation": "Iterates ALL_ALIASES and clears the whole object store. n/a"
+            }
+          ]
+        },
+        "localstorage_secret": {
+          "score": 100.0,
+          "weight": 0.01,
+          "emphasis": 0.5,
+          "raw_penalty": 0.0,
+          "global_penalty": 0.0,
+          "hard_gate": true,
+          "hard_gate_triggered": false,
+          "static_findings": 0,
+          "llm_assessments": 1,
+          "findings": [],
+          "llm_scores": [
+            {
+              "rule_id": "LS-001",
+              "rule_name": "No private keys in localStorage (duplicate hard gate)",
+              "score": 1.0,
+              "explanation": "No localStorage usage; web path uses encrypted IndexedDB. n/a"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "agent_id": "kimi-k2.7-code-run2",
+      "total_score": 86.41,
+      "total_penalty": 13.59,
+      "hard_gate_capped": false,
+      "verdict": "PASS",
+      "files_analyzed": 1,
+      "lines_analyzed": 353,
+      "categories": {
+        "race_condition": {
+          "score": 92.0,
+          "weight": 0.18,
+          "emphasis": 2.0,
+          "raw_penalty": 2.0,
+          "global_penalty": 4.0,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "static_findings": 0,
+          "llm_assessments": 3,
+          "findings": [],
+          "llm_scores": [
+            {
+              "rule_id": "RACE-003",
+              "rule_name": "Async operation without cancellation",
+              "score": 1.0,
+              "explanation": "No long-lived async subscriptions or timers; operations are one-shot promise-based storage calls. n/a"
+            },
+            {
+              "rule_id": "RACE-004",
+              "rule_name": "Missing AbortController for fetch",
+              "score": 1.0,
+              "explanation": "No fetch calls in this module. n/a"
+            },
+            {
+              "rule_id": "RACE-005",
+              "rule_name": "Concurrent state mutation",
+              "score": 0.9,
+              "explanation": "All mutating ops run under withLock and create is deduped via dedupeOp. Residual: loadSeed does not dedupe concurrent reads with the same key, and in-flight load vs wipe can still serialize correctly "
+            }
+          ]
+        },
+        "stale_state": {
+          "score": 100.0,
+          "weight": 0.15,
+          "emphasis": 2.0,
+          "raw_penalty": 0.0,
+          "global_penalty": 0.0,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "static_findings": 0,
+          "llm_assessments": 3,
+          "findings": [],
+          "llm_scores": [
+            {
+              "rule_id": "STALE-002",
+              "rule_name": "Cached data used after async gap",
+              "score": 1.0,
+              "explanation": "No cached data reused across awaits except DB handle, which is opened once. n/a"
+            },
+            {
+              "rule_id": "STALE-003",
+              "rule_name": "Ghost balance display",
+              "score": 1.0,
+              "explanation": "No balance display in this module. n/a"
+            },
+            {
+              "rule_id": "STALE-004",
+              "rule_name": "Missing refetch on focus/reconnect",
+              "score": 1.0,
+              "explanation": "No server-poll data in this module. n/a"
+            }
+          ]
+        },
+        "ui_component": {
+          "score": 100.0,
+          "weight": 0.08,
+          "emphasis": 1.68,
+          "raw_penalty": 0.0,
+          "global_penalty": 0.0,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "static_findings": 0,
+          "llm_assessments": 3,
+          "findings": [],
+          "llm_scores": [
+            {
+              "rule_id": "UI-001",
+              "rule_name": "Modal layer isolation",
+              "score": 1.0,
+              "explanation": "No UI/modal code. n/a"
+            },
+            {
+              "rule_id": "UI-002",
+              "rule_name": "Back handler on layers",
+              "score": 1.0,
+              "explanation": "No back-button handling. n/a"
+            },
+            {
+              "rule_id": "UI-003",
+              "rule_name": "Component prop correctness",
+              "score": 1.0,
+              "explanation": "No component props. n/a"
+            }
+          ]
+        },
+        "architecture": {
+          "score": 98.4,
+          "weight": 0.08,
+          "emphasis": 1.68,
+          "raw_penalty": 0.4,
+          "global_penalty": 0.67,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "static_findings": 0,
+          "llm_assessments": 3,
+          "findings": [],
+          "llm_scores": [
+            {
+              "rule_id": "ARCH-001",
+              "rule_name": "Circular dependency",
+              "score": 1.0,
+              "explanation": "No circular imports. n/a"
+            },
+            {
+              "rule_id": "ARCH-002",
+              "rule_name": "Separation of concerns",
+              "score": 0.9,
+              "explanation": "Clean backend split; remaining coupling is the Platform.OS inline branch. Could be abstracted into a pluggable backend interface."
+            },
+            {
+              "rule_id": "ARCH-003",
+              "rule_name": "Module structure",
+              "score": 0.9,
+              "explanation": "Still a single file with public API, two backends, mutex, crypto, validation; acceptable but could be split into smaller modules."
+            }
+          ]
+        },
+        "code_style": {
+          "score": 100.0,
+          "weight": 0.05,
+          "emphasis": 1.05,
+          "raw_penalty": 0.0,
+          "global_penalty": 0.0,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "static_findings": 0,
+          "llm_assessments": 2,
+          "findings": [],
+          "llm_scores": [
+            {
+              "rule_id": "STYLE-001",
+              "rule_name": "ESLint compliance",
+              "score": 1.0,
+              "explanation": "No empty catch blocks; all catch blocks log or throw. Appears eslint-clean."
+            },
+            {
+              "rule_id": "STYLE-002",
+              "rule_name": "Import ordering",
+              "score": 1.0,
+              "explanation": "Imports minimal and grouped. n/a"
+            }
+          ]
+        },
+        "security_crypto": {
+          "score": 95.2,
+          "weight": 0.1,
+          "emphasis": 2.0,
+          "raw_penalty": 1.2,
+          "global_penalty": 2.4,
+          "hard_gate": true,
+          "hard_gate_triggered": false,
+          "static_findings": 0,
+          "llm_assessments": 4,
+          "findings": [],
+          "llm_scores": [
+            {
+              "rule_id": "SEC-007",
+              "rule_name": "Signature verification",
+              "score": 1.0,
+              "explanation": "No signature verification in this module. n/a"
+            },
+            {
+              "rule_id": "SEC-008",
+              "rule_name": "No nonce reuse",
+              "score": 1.0,
+              "explanation": "AES-GCM IV is fresh per encryption; no nonce reuse. n/a"
+            },
+            {
+              "rule_id": "SEC-009",
+              "rule_name": "Sandbox WebView/iframe content",
+              "score": 1.0,
+              "explanation": "No WebView or iframe usage. n/a"
+            },
+            {
+              "rule_id": "SEC-010",
+              "rule_name": "Missing zeroization of sensitive data",
+              "score": 0.8,
+              "explanation": "zeroize() is used on Uint8Arrays, but immutable JS strings (base64) and Array.from copies cannot be zeroized; residual exposure remains."
+            }
+          ]
+        },
+        "ota_native_boundary": {
+          "score": 89.6,
+          "weight": 0.06,
+          "emphasis": 1.26,
+          "raw_penalty": 2.6,
+          "global_penalty": 3.27,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "static_findings": 0,
+          "llm_assessments": 2,
+          "findings": [],
+          "llm_scores": [
+            {
+              "rule_id": "OTA-001",
+              "rule_name": "Native module call in OTA-shippable code",
+              "score": 0.9,
+              "explanation": "SecureStore is statically imported but every native call is gated by assertNativeAvailable(). The import still assumes the module exists in the bundle."
+            },
+            {
+              "rule_id": "OTA-002",
+              "rule_name": "Fingerprint compatibility check",
+              "score": 0.9,
+              "explanation": "isAvailableAsync() checked before every native operation; import-time assumption remains."
+            }
+          ]
+        },
+        "error_handling": {
+          "score": 97.6,
+          "weight": 0.06,
+          "emphasis": 1.26,
+          "raw_penalty": 0.6,
+          "global_penalty": 0.75,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "static_findings": 0,
+          "llm_assessments": 2,
+          "findings": [],
+          "llm_scores": [
+            {
+              "rule_id": "ERR-002",
+              "rule_name": "Error propagation",
+              "score": 1.0,
+              "explanation": "All errors are wrapped as KeyStorageError with a code and re-thrown to callers."
+            },
+            {
+              "rule_id": "ERR-003",
+              "rule_name": "Non-transient failure handling",
+              "score": 0.9,
+              "explanation": "No retry/backoff for storage failures; arguably correct because local keychain failures are generally not transient."
+            }
+          ]
+        },
+        "data_integrity": {
+          "score": 97.6,
+          "weight": 0.06,
+          "emphasis": 1.26,
+          "raw_penalty": 0.6,
+          "global_penalty": 0.75,
+          "hard_gate": true,
+          "hard_gate_triggered": false,
+          "static_findings": 0,
+          "llm_assessments": 5,
+          "findings": [],
+          "llm_scores": [
+            {
+              "rule_id": "DATA-001",
+              "rule_name": "Unify address sources",
+              "score": 1.0,
+              "explanation": "No address derivation in this module. n/a"
+            },
+            {
+              "rule_id": "DATA-002",
+              "rule_name": "No silent storage downgrade",
+              "score": 1.0,
+              "explanation": "No silent downgrade to less-secure storage. n/a"
+            },
+            {
+              "rule_id": "DATA-003",
+              "rule_name": "Clear stale armed results",
+              "score": 1.0,
+              "explanation": "No armed results / pending state. n/a"
+            },
+            {
+              "rule_id": "DATA-004",
+              "rule_name": "Make failed critical operations fatal",
+              "score": 1.0,
+              "explanation": "createAndStoreSeed throws on failure and wipes partial state; cleanup failure is logged but does not swallow the primary error."
+            },
+            {
+              "rule_id": "DATA-005",
+              "rule_name": "Deduplicate sync requests",
+              "score": 0.9,
+              "explanation": "createAndStoreSeed is deduped by key; loadSeed and wipe are serialized by lock but not deduped."
+            }
+          ]
+        },
+        "timeout_retry": {
+          "score": 100.0,
+          "weight": 0.04,
+          "emphasis": 0.84,
+          "raw_penalty": 0.0,
+          "global_penalty": 0.0,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "static_findings": 0,
+          "llm_assessments": 2,
+          "findings": [],
+          "llm_scores": [
+            {
+              "rule_id": "TIMEOUT-001",
+              "rule_name": "Preserve timeout backoff on failures",
+              "score": 1.0,
+              "explanation": "No timeout/retry logic in this module. n/a"
+            },
+            {
+              "rule_id": "TIMEOUT-002",
+              "rule_name": "Re-throw non-transient failures",
+              "score": 1.0,
+              "explanation": "No retry logic. n/a"
+            }
+          ]
+        },
+        "dead_code": {
+          "score": 100.0,
+          "weight": 0.03,
+          "emphasis": 0.63,
+          "raw_penalty": 0.0,
+          "global_penalty": 0.0,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "static_findings": 0,
+          "llm_assessments": 2,
+          "findings": [],
+          "llm_scores": [
+            {
+              "rule_id": "DEAD-001",
+              "rule_name": "No dead code or unused imports",
+              "score": 1.0,
+              "explanation": "No dead code or unused imports. n/a"
+            },
+            {
+              "rule_id": "DEAD-002",
+              "rule_name": "No unreachable branches",
+              "score": 1.0,
+              "explanation": "No unreachable branches. n/a"
+            }
+          ]
+        },
+        "silent_catch": {
+          "score": 100.0,
+          "weight": 0.04,
+          "emphasis": 0.84,
+          "raw_penalty": 0.0,
+          "global_penalty": 0.0,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "static_findings": 0,
+          "llm_assessments": 1,
+          "findings": [],
+          "llm_scores": [
+            {
+              "rule_id": "CATCH-001",
+              "rule_name": "Silent catch (LLM check for context)",
+              "score": 1.0,
+              "explanation": "No silent catch blocks; the only catch logs via console.error. n/a"
+            }
+          ]
+        },
+        "accessibility": {
+          "score": 100.0,
+          "weight": 0.04,
+          "emphasis": 0.84,
+          "raw_penalty": 0.0,
+          "global_penalty": 0.0,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "static_findings": 0,
+          "llm_assessments": 1,
+          "findings": [],
+          "llm_scores": [
+            {
+              "rule_id": "A11Y-003",
+              "rule_name": "ARIA labels on interactive elements",
+              "score": 1.0,
+              "explanation": "No interactive elements. n/a"
+            }
+          ]
+        },
+        "documentation": {
+          "score": 99.2,
+          "weight": 0.02,
+          "emphasis": 0.5,
+          "raw_penalty": 0.2,
+          "global_penalty": 0.1,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "static_findings": 0,
+          "llm_assessments": 2,
+          "findings": [],
+          "llm_scores": [
+            {
+              "rule_id": "DOC-001",
+              "rule_name": "Label code fences in docs",
+              "score": 1.0,
+              "explanation": "No markdown docs. n/a"
+            },
+            {
+              "rule_id": "DOC-002",
+              "rule_name": "Document complex logic",
+              "score": 0.9,
+              "explanation": "Security model documented in header; added inline comment explaining cleanup catch. Could add more about why web cannot provide UV."
+            }
+          ]
+        },
+        "missing_validation": {
+          "score": 98.8,
+          "weight": 0.03,
+          "emphasis": 0.63,
+          "raw_penalty": 0.3,
+          "global_penalty": 0.19,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "static_findings": 0,
+          "llm_assessments": 2,
+          "findings": [],
+          "llm_scores": [
+            {
+              "rule_id": "VALID-001",
+              "rule_name": "Runtime validation at external boundaries",
+              "score": 0.95,
+              "explanation": "Asserts seed length and validates web record shape, including ciphertext size. Slight nit: does not validate that iv values are bytes 0-255."
+            },
+            {
+              "rule_id": "VALID-002",
+              "rule_name": "Per-item validation in arrays",
+              "score": 1.0,
+              "explanation": "No arrays of external items. n/a"
+            }
+          ]
+        },
+        "webview_sandbox": {
+          "score": 100.0,
+          "weight": 0.03,
+          "emphasis": 0.63,
+          "raw_penalty": 0.0,
+          "global_penalty": 0.0,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "static_findings": 0,
+          "llm_assessments": 2,
+          "findings": [],
+          "llm_scores": [
+            {
+              "rule_id": "SANDBOX-001",
+              "rule_name": "Sandbox iframe content",
+              "score": 1.0,
+              "explanation": "No iframe usage. n/a"
+            },
+            {
+              "rule_id": "SANDBOX-002",
+              "rule_name": "Content Security Policy",
+              "score": 1.0,
+              "explanation": "No CSP headers set here, but module docs mention CSP. n/a"
+            }
+          ]
+        },
+        "state_management": {
+          "score": 100.0,
+          "weight": 0.03,
+          "emphasis": 0.63,
+          "raw_penalty": 0.0,
+          "global_penalty": 0.0,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "static_findings": 0,
+          "llm_assessments": 2,
+          "findings": [],
+          "llm_scores": [
+            {
+              "rule_id": "STATE-001",
+              "rule_name": "No recursive resolveRequest",
+              "score": 1.0,
+              "explanation": "No recursive state resolution. n/a"
+            },
+            {
+              "rule_id": "STATE-002",
+              "rule_name": "State synchronization",
+              "score": 1.0,
+              "explanation": "Shared state is opChain, dbPromise, inFlightOps; all managed carefully. n/a"
+            }
+          ]
+        },
+        "performance": {
+          "score": 98.8,
+          "weight": 0.02,
+          "emphasis": 0.5,
+          "raw_penalty": 0.3,
+          "global_penalty": 0.15,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "static_findings": 0,
+          "llm_assessments": 1,
+          "findings": [],
+          "llm_scores": [
+            {
+              "rule_id": "PERF-001",
+              "rule_name": "Don't initialize expensive resources on every call",
+              "score": 0.95,
+              "explanation": "DB connection cached via dbPromise and transactions reused per operation; still opens a new transaction per call, but connection is not closed each time."
+            }
+          ]
+        },
+        "naming_convention": {
+          "score": 100.0,
+          "weight": 0.02,
+          "emphasis": 0.5,
+          "raw_penalty": 0.0,
+          "global_penalty": 0.0,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "static_findings": 0,
+          "llm_assessments": 1,
+          "findings": [],
+          "llm_scores": [
+            {
+              "rule_id": "NAME-001",
+              "rule_name": "Clear naming",
+              "score": 1.0,
+              "explanation": "Names are clear and accurately describe behavior. n/a"
+            }
+          ]
+        },
+        "preserve_behavior": {
+          "score": 100.0,
+          "weight": 0.02,
+          "emphasis": 0.5,
+          "raw_penalty": 0.0,
+          "global_penalty": 0.0,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "static_findings": 0,
+          "llm_assessments": 1,
+          "findings": [],
+          "llm_scores": [
+            {
+              "rule_id": "PRES-001",
+              "rule_name": "Don't break existing behavior",
+              "score": 1.0,
+              "explanation": "No existing behavior to preserve. n/a"
+            }
+          ]
+        },
+        "balance_sync": {
+          "score": 100.0,
+          "weight": 0.02,
+          "emphasis": 0.5,
+          "raw_penalty": 0.0,
+          "global_penalty": 0.0,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "static_findings": 0,
+          "llm_assessments": 1,
+          "findings": [],
+          "llm_scores": [
+            {
+              "rule_id": "BAL-001",
+              "rule_name": "Balance display matches actual state",
+              "score": 1.0,
+              "explanation": "No balance display. n/a"
+            }
+          ]
+        },
+        "type_safety": {
+          "score": 99.2,
+          "weight": 0.02,
+          "emphasis": 0.5,
+          "raw_penalty": 0.2,
+          "global_penalty": 0.1,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "static_findings": 0,
+          "llm_assessments": 2,
+          "findings": [],
+          "llm_scores": [
+            {
+              "rule_id": "TYPE-001",
+              "rule_name": "No unsafe type casts",
+              "score": 0.9,
+              "explanation": "Uses Partial cast after structural check; acceptable. The encryptSeed/decryptSeed helpers expose crypto surface not required by the task."
+            },
+            {
+              "rule_id": "TYPE-002",
+              "rule_name": "Correct enum usage",
+              "score": 1.0,
+              "explanation": "No enums in this module. n/a"
+            }
+          ]
+        },
+        "user_verification": {
+          "score": 90.4,
+          "weight": 0.02,
+          "emphasis": 0.5,
+          "raw_penalty": 2.4,
+          "global_penalty": 1.2,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "static_findings": 0,
+          "llm_assessments": 1,
+          "findings": [],
+          "llm_scores": [
+            {
+              "rule_id": "UV-001",
+              "rule_name": "User verification on passkey operations",
+              "score": 0.6,
+              "explanation": "Native path uses requireAuthentication. Web path has no UV gate because the web platform lacks one for IndexedDB; documented honestly."
+            }
+          ]
+        },
+        "api_correctness": {
+          "score": 100.0,
+          "weight": 0.02,
+          "emphasis": 0.5,
+          "raw_penalty": 0.0,
+          "global_penalty": 0.0,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "static_findings": 0,
+          "llm_assessments": 3,
+          "findings": [],
+          "llm_scores": [
+            {
+              "rule_id": "API-001",
+              "rule_name": "Implement required interfaces",
+              "score": 1.0,
+              "explanation": "Required functions exported and a KeyStorageError code added for programmatic handling."
+            },
+            {
+              "rule_id": "API-002",
+              "rule_name": "Handle URL objects in interceptors",
+              "score": 1.0,
+              "explanation": "No URL interceptors. n/a"
+            },
+            {
+              "rule_id": "API-003",
+              "rule_name": "Correct HTML attributes",
+              "score": 1.0,
+              "explanation": "No HTML attributes. n/a"
+            }
+          ]
+        },
+        "incomplete_cleanup": {
+          "score": 100.0,
+          "weight": 0.01,
+          "emphasis": 0.5,
+          "raw_penalty": 0.0,
+          "global_penalty": 0.0,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "static_findings": 0,
+          "llm_assessments": 2,
+          "findings": [],
+          "llm_scores": [
+            {
+              "rule_id": "CLEAN-001",
+              "rule_name": "Complete keychain wipe",
+              "score": 1.0,
+              "explanation": "wipeAllKeychainData deletes all aliases and clears IndexedDB. n/a"
+            },
+            {
+              "rule_id": "CLEAN-002",
+              "rule_name": "Sweep all items, not just first",
+              "score": 1.0,
+              "explanation": "Iterates ALL_ALIASES and clears the whole object store. n/a"
+            }
+          ]
+        },
+        "localstorage_secret": {
+          "score": 100.0,
+          "weight": 0.01,
+          "emphasis": 0.5,
+          "raw_penalty": 0.0,
+          "global_penalty": 0.0,
+          "hard_gate": true,
+          "hard_gate_triggered": false,
+          "static_findings": 0,
+          "llm_assessments": 1,
+          "findings": [],
+          "llm_scores": [
+            {
+              "rule_id": "LS-001",
+              "rule_name": "No private keys in localStorage (duplicate hard gate)",
+              "score": 1.0,
+              "explanation": "No localStorage usage; web path uses encrypted IndexedDB. n/a"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
