@@ -45,6 +45,27 @@ Every fix maps 1:1 to an instruction in the extract: a mutex + in-flight dedup, 
 - **Run 2 knew run 1's findings.** That is the point (measuring instruction-driven improvement), but it means run-2 scores are not comparable to another model's cold run — compare cold-vs-cold and improved-vs-improved.
 - **Second opinion pending:** no external LLM has judged these runs yet. See [`AGENT_PROMPT.md`](AGENT_PROMPT.md) for the exact prompt to give another model, both to take the test and to act as second judge.
 
+## Second opinion: the blind panel (3 independent judges)
+
+Three independent judge agents (security, concurrency, and maintainability lenses) blind-reviewed 5 anonymized submissions — my run1 and run2 mixed with the three fixture solutions as controls. Judges saw only content-hash labels; the author mapping stayed sealed until aggregation. Full detail: [PANEL_REPORT.md](PANEL_REPORT.md).
+
+| Submission (unblinded) | Rubric+panel score | Holistic median | Panel PASS votes | My self-judged score |
+|---|---|---|---|---|
+| **claude-fable-5 run2** | 98.8 | 90 | 3/3 | 89.55 |
+| claude-fable-5 run1 | 65.43 | 66 | 0/3 | 46.36 |
+| fixture "good" | 66.4 | 48 | 0/3 | — |
+| fixture "partial" | 54.42 | 18 | 0/3 | — |
+| fixture "bad" | 0.0 | 3 | 0/3 | — |
+
+**What the panel showed:**
+
+- **Perfect ranking consensus (agreement 1.0)** — all three judges independently ordered the five blind submissions identically, and the ordering matches the deterministic layer's. The two opinions agree.
+- **The controls worked — and caught the fixtures, not the judges.** All judges demolished the known-bad control (3/100). But the "known-good" fixture *failed* the panel (holistic 48): judges found it calls undefined helpers and has a broken web wipe path. The synthetic "good" fixture is only good relative to "bad" — it needs to be rewritten. A blind panel auditing the test's own ground truth is exactly the kind of thing this setup is for.
+- **My self-judgment was stricter than the blind panel** on run1 (46 vs ~66): knowing my own intent, I punished design-level flaws (missing mutex, no zeroization) harder than reviewers who only saw the code once. Both opinions agree on the verdicts (run1 FAIL, run2 PASS) and the delta (+43 self-judged, +33/+24 panel).
+- **Judge disagreements are localized and actionable** — 14 rules had score spreads > 0.3 (e.g. STYLE-001 spread 1.0 on the partial fixture). These are the rule descriptions to tighten next.
+
+**Caveats:** all three judges run on the same model family as the examinee (independent contexts and lenses, but not independent vendors) and judge outputs are stochastic — the medians and full per-judge JSONs are committed so the aggregation itself is reproducible. For a true cross-vendor panel, hand `panel_run/packet.md` to other providers using AGENT_PROMPT.md Role 3 and re-run `panel.py aggregate` with their verdicts added.
+
 ## Self-critique of the test itself
 
 - One task is an anecdote, not a benchmark. The kit needs 5–10 tasks across the top rubric categories before scores between models mean much.

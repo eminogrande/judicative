@@ -1,0 +1,271 @@
+{
+  "disagreements": {
+    "SUBMISSION-A": [],
+    "SUBMISSION-B": [
+      {
+        "rule_id": "DATA-005",
+        "scores": [
+          1.0,
+          0.6,
+          1.0
+        ],
+        "spread": 0.4
+      },
+      {
+        "rule_id": "DOC-002",
+        "scores": [
+          1.0,
+          0.5,
+          1.0
+        ],
+        "spread": 0.5
+      },
+      {
+        "rule_id": "NAME-001",
+        "scores": [
+          0.4,
+          1.0,
+          0.4
+        ],
+        "spread": 0.6
+      },
+      {
+        "rule_id": "PERF-001",
+        "scores": [
+          0.7,
+          0.8,
+          1.0
+        ],
+        "spread": 0.3
+      },
+      {
+        "rule_id": "VALID-001",
+        "scores": [
+          1.0,
+          1.0,
+          0.6
+        ],
+        "spread": 0.4
+      }
+    ],
+    "SUBMISSION-C": [
+      {
+        "rule_id": "DOC-002",
+        "scores": [
+          1.0,
+          1.0,
+          0.5
+        ],
+        "spread": 0.5
+      },
+      {
+        "rule_id": "OTA-002",
+        "scores": [
+          1.0,
+          0.5,
+          0.4
+        ],
+        "spread": 0.6
+      },
+      {
+        "rule_id": "RACE-005",
+        "scores": [
+          1.0,
+          0.5,
+          1.0
+        ],
+        "spread": 0.5
+      },
+      {
+        "rule_id": "STYLE-001",
+        "scores": [
+          0.0,
+          1.0,
+          0.1
+        ],
+        "spread": 1.0
+      },
+      {
+        "rule_id": "TYPE-001",
+        "scores": [
+          0.5,
+          0.6,
+          1.0
+        ],
+        "spread": 0.5
+      },
+      {
+        "rule_id": "VALID-001",
+        "scores": [
+          1.0,
+          0.7,
+          0.4
+        ],
+        "spread": 0.6
+      }
+    ],
+    "SUBMISSION-D": [
+      {
+        "rule_id": "CLEAN-002",
+        "scores": [
+          1.0,
+          0.3,
+          0.5
+        ],
+        "spread": 0.7
+      },
+      {
+        "rule_id": "OTA-001",
+        "scores": [
+          1.0,
+          1.0,
+          0.4
+        ],
+        "spread": 0.6
+      },
+      {
+        "rule_id": "OTA-002",
+        "scores": [
+          0.5,
+          0.6,
+          1.0
+        ],
+        "spread": 0.5
+      },
+      {
+        "rule_id": "STYLE-001",
+        "scores": [
+          0.0,
+          1.0,
+          0.2
+        ],
+        "spread": 1.0
+      },
+      {
+        "rule_id": "VALID-001",
+        "scores": [
+          1.0,
+          1.0,
+          0.6
+        ],
+        "spread": 0.4
+      }
+    ],
+    "SUBMISSION-E": [
+      {
+        "rule_id": "ARCH-002",
+        "scores": [
+          1.0,
+          0.4,
+          1.0
+        ],
+        "spread": 0.6
+      },
+      {
+        "rule_id": "ARCH-003",
+        "scores": [
+          1.0,
+          1.0,
+          0.2
+        ],
+        "spread": 0.8
+      },
+      {
+        "rule_id": "DEAD-001",
+        "scores": [
+          0.0,
+          1.0,
+          1.0
+        ],
+        "spread": 1.0
+      },
+      {
+        "rule_id": "NAME-001",
+        "scores": [
+          1.0,
+          1.0,
+          0.3
+        ],
+        "spread": 0.7
+      },
+      {
+        "rule_id": "SANDBOX-002",
+        "scores": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "spread": 1.0
+      }
+    ]
+  },
+  "ranking_agreement": 1.0,
+  "judges": [
+    "judge-1-security",
+    "judge-2-concurrency",
+    "judge-3-maintainability"
+  ],
+  "pass_threshold": 70,
+  "rows": [
+    {
+      "label": "SUBMISSION-A",
+      "author": "runs/claude-fable-5/run2",
+      "rubric_panel_score": 98.8,
+      "rubric_verdict": "PASS",
+      "hard_gate_capped": false,
+      "holistic_median": 90,
+      "holistic_min": 90,
+      "holistic_max": 91,
+      "panel_pass_votes": 3,
+      "panel_votes": 3
+    },
+    {
+      "label": "SUBMISSION-D",
+      "author": "test_fixtures/solution_good",
+      "rubric_panel_score": 66.4,
+      "rubric_verdict": "FAIL",
+      "hard_gate_capped": false,
+      "holistic_median": 48,
+      "holistic_min": 46,
+      "holistic_max": 55,
+      "panel_pass_votes": 0,
+      "panel_votes": 3
+    },
+    {
+      "label": "SUBMISSION-B",
+      "author": "runs/claude-fable-5/run1",
+      "rubric_panel_score": 65.43,
+      "rubric_verdict": "FAIL",
+      "hard_gate_capped": false,
+      "holistic_median": 66,
+      "holistic_min": 62,
+      "holistic_max": 66,
+      "panel_pass_votes": 0,
+      "panel_votes": 3
+    },
+    {
+      "label": "SUBMISSION-C",
+      "author": "test_fixtures/solution_partial",
+      "rubric_panel_score": 54.42,
+      "rubric_verdict": "FAIL",
+      "hard_gate_capped": false,
+      "holistic_median": 18,
+      "holistic_min": 15,
+      "holistic_max": 22,
+      "panel_pass_votes": 0,
+      "panel_votes": 3
+    },
+    {
+      "label": "SUBMISSION-E",
+      "author": "test_fixtures/solution_bad",
+      "rubric_panel_score": 0.0,
+      "rubric_verdict": "FAIL",
+      "hard_gate_capped": false,
+      "holistic_median": 3,
+      "holistic_min": 3,
+      "holistic_max": 3,
+      "panel_pass_votes": 0,
+      "panel_votes": 3
+    }
+  ]
+}
