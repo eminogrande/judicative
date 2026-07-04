@@ -1,0 +1,546 @@
+{
+  "glm-5.2-run2": [
+    {
+      "explanation": "n/a \u2014 no useEffect or event handlers; pure storage module",
+      "rule_id": "RACE-003",
+      "score": 1.0
+    },
+    {
+      "explanation": "n/a \u2014 no fetch calls",
+      "rule_id": "RACE-004",
+      "score": 1.0
+    },
+    {
+      "explanation": "AsyncMutex now serializes all operations per adapter. Web adapter mutex serializes setItem/getItem/removeItem/wipe. RN adapter has its own mutex. Minor: if both adapters were used simultaneously (shouldn't happen but technically possible if resetSecureStorageAdapter is called mid-operation), they don't share a mutex.",
+      "rule_id": "RACE-005",
+      "score": 0.95
+    },
+    {
+      "explanation": "DB connection is now cached and checked for staleness. onversionchange handler closes and nullifies the connection. The mutex ensures no stale db reference is used concurrently. Minor: the cached cryptoKey could become stale if the DB is deleted externally \u2014 it would fail on next encrypt/decrypt rather than refresh.",
+      "rule_id": "STALE-002",
+      "score": 0.9
+    },
+    {
+      "explanation": "n/a \u2014 no balance display",
+      "rule_id": "STALE-003",
+      "score": 1.0
+    },
+    {
+      "explanation": "n/a \u2014 no server-side data",
+      "rule_id": "STALE-004",
+      "score": 1.0
+    },
+    {
+      "explanation": "n/a \u2014 no modals",
+      "rule_id": "UI-001",
+      "score": 1.0
+    },
+    {
+      "explanation": "n/a \u2014 no back button",
+      "rule_id": "UI-002",
+      "score": 1.0
+    },
+    {
+      "explanation": "n/a \u2014 no React components",
+      "rule_id": "UI-003",
+      "score": 1.0
+    },
+    {
+      "explanation": "No circular dependencies. factory.ts uses dynamic import() for adapters. index.ts re-exports from all modules. Dependency graph: index \u2192 types/crypto/platform/mutex/web/rn/factory, factory \u2192 types/crypto/platform (dynamic import for adapters).",
+      "rule_id": "ARCH-001",
+      "score": 1.0
+    },
+    {
+      "explanation": "Good separation: types, platform detection, crypto utils, mutex, web adapter, RN adapter, factory, and index are all separate files. Each has a single responsibility. Minor: factory.ts still contains high-level API functions that could be a separate api.ts.",
+      "rule_id": "ARCH-002",
+      "score": 0.9
+    },
+    {
+      "explanation": "Files now have single responsibilities: types.ts (types), crypto-utils.ts (crypto), platform.ts (detection), mutex.ts (concurrency), web-adapter.ts (web storage), rn-adapter.ts (RN storage), factory.ts (factory+API), index.ts (exports). Minor: factory.ts combines factory + high-level API.",
+      "rule_id": "ARCH-003",
+      "score": 0.9
+    },
+    {
+      "explanation": "No `any` types \u2014 KeychainAPI interface replaces `any`. All types are explicit. Minor: the `as` casts in validateKeychainResult are type assertions, but they're guarded by runtime checks.",
+      "rule_id": "STYLE-001",
+      "score": 0.95
+    },
+    {
+      "explanation": "Imports are ordered: stdlib/external first, then internal relative imports. Consistent across all files.",
+      "rule_id": "STYLE-002",
+      "score": 1.0
+    },
+    {
+      "explanation": "n/a \u2014 no signature verification",
+      "rule_id": "SEC-007",
+      "score": 1.0
+    },
+    {
+      "explanation": "IV is generated fresh for each encrypt call via generateIV() using crypto.getRandomValues. 12-byte IV per NIST SP 800-38D. No reuse possible since each encryption generates a new random IV. Minor: no explicit uniqueness tracking, but cryptographic RNG makes collision negligible.",
+      "rule_id": "SEC-008",
+      "score": 0.9
+    },
+    {
+      "explanation": "n/a \u2014 no WebView or iframe",
+      "rule_id": "SEC-009",
+      "score": 1.0
+    },
+    {
+      "explanation": "zeroize() is now called on sensitive arrays: raw seed bytes after hex conversion, encoded plaintext after encrypt, decrypted buffer after decode, IV after encrypt failure, raw key bytes after storing. Minor: the hex string seed itself cannot be zeroized (strings are immutable in JS), and CryptoKey objects can't be manually cleared.",
+      "rule_id": "SEC-010",
+      "score": 0.85
+    },
+    {
+      "explanation": "Binary fingerprint check added via getBinaryFingerprint() and supportsCapability(). Native module calls are gated behind these checks. The try/catch fallback still exists but is now guarded. Minor: the fingerprint check itself calls require() which could fail on older binaries.",
+      "rule_id": "OTA-001",
+      "score": 0.85
+    },
+    {
+      "explanation": "getBinaryFingerprint() probes for native module availability before use. supportsCapability() is used to check before loading keychain. Minor: fingerprint is a string comparison, not a semantic version check \u2014 can't compare 'rn-keychain-available' against a required minimum version.",
+      "rule_id": "OTA-002",
+      "score": 0.85
+    },
+    {
+      "explanation": "All errors propagated via throw. getTrackedKeys now throws SecureStorageError instead of returning []. Wipe failures in RN adapter are collected and re-thrown. Minor: JSON.parse failure in getTrackedKeys still returns [] instead of propagating (corrupted tracked keys is a soft failure).",
+      "rule_id": "ERR-002",
+      "score": 0.95
+    },
+    {
+      "explanation": "TransientStorageError class added for transient failures (IndexedDB lock contention). Callers can check `instanceof TransientStorageError` to decide retry. Non-transient errors use SecureStorageError. Minor: not all transient scenarios are covered (e.g., quota exceeded could be either transient or permanent).",
+      "rule_id": "ERR-003",
+      "score": 0.85
+    },
+    {
+      "explanation": "n/a \u2014 no address handling",
+      "rule_id": "DATA-001",
+      "score": 1.0
+    },
+    {
+      "explanation": "Storage downgrade from react-native-keychain to expo-secure-store is now logged via console.warn (visible to developer). The caller can detect this via getBinaryFingerprint(). Minor: the downgrade is not surfaced to the end user \u2014 only to the developer console.",
+      "rule_id": "DATA-002",
+      "score": 0.8
+    },
+    {
+      "explanation": "n/a \u2014 no stale armed results",
+      "rule_id": "DATA-003",
+      "score": 1.0
+    },
+    {
+      "explanation": "Wipe is now critical: RN adapter collects failures and throws if any key couldn't be removed. Web adapter clears both stores and deletes the database. Minor: web adapter resolves (not rejects) on DB delete failure since stores were already cleared.",
+      "rule_id": "DATA-004",
+      "score": 0.95
+    },
+    {
+      "explanation": "AsyncMutex serializes all operations per adapter. Concurrent setItem calls are queued and executed in order. No duplicate state writes. Minor: mutex is per-adapter-instance, not global \u2014 if two adapter instances existed they'd race (but singleton pattern prevents this).",
+      "rule_id": "DATA-005",
+      "score": 0.9
+    },
+    {
+      "explanation": "n/a \u2014 no retry/backoff",
+      "rule_id": "TIMEOUT-001",
+      "score": 1.0
+    },
+    {
+      "explanation": "n/a \u2014 no retry logic",
+      "rule_id": "TIMEOUT-002",
+      "score": 1.0
+    },
+    {
+      "explanation": "No dead code. All imports are used. MockAdapter class was removed from tests. All test cases reference their imports.",
+      "rule_id": "DEAD-001",
+      "score": 1.0
+    },
+    {
+      "explanation": "No unreachable branches",
+      "rule_id": "DEAD-002",
+      "score": 1.0
+    },
+    {
+      "explanation": "getTrackedKeys now throws on keychain errors instead of returning []. The JSON.parse catch still returns [] for corrupted data (soft failure, logged). RN wipe inner catch logs and collects failures for later re-throw. No silently swallowed errors remain except the JSON.parse edge case.",
+      "rule_id": "CATCH-001",
+      "score": 0.85
+    },
+    {
+      "explanation": "n/a \u2014 no UI elements",
+      "rule_id": "A11Y-003",
+      "score": 1.0
+    },
+    {
+      "explanation": "All code fences in README have language labels",
+      "rule_id": "DOC-001",
+      "score": 1.0
+    },
+    {
+      "explanation": "Inline comments added: NIST SP 800-38D IV explanation, zeroization rationale, key storage strategy, mutex purpose. File-level JSDoc on all modules. Minor: factory.ts high-level functions could use more detailed param docs.",
+      "rule_id": "DOC-002",
+      "score": 0.85
+    },
+    {
+      "explanation": "validateKeychainResult() checks the shape of keychain results. validateTrackedKeys() validates parsed JSON. isValidKey() validates input keys. getItem result is checked before use. Minor: IndexedDB getRequest.result is still loosely typed (checked via 'in' operator).",
+      "rule_id": "VALID-001",
+      "score": 0.85
+    },
+    {
+      "explanation": "validateTrackedKeys() filters parsed array to only string items with length > 0. Each item is individually validated. Minor: no maximum length check on individual key strings.",
+      "rule_id": "VALID-002",
+      "score": 0.85
+    },
+    {
+      "explanation": "n/a \u2014 no iframe",
+      "rule_id": "SANDBOX-001",
+      "score": 1.0
+    },
+    {
+      "explanation": "n/a \u2014 no CSP",
+      "rule_id": "SANDBOX-002",
+      "score": 1.0
+    },
+    {
+      "explanation": "n/a \u2014 no resolveRequest",
+      "rule_id": "STATE-001",
+      "score": 1.0
+    },
+    {
+      "explanation": "cachedAdapter singleton with resetSecureStorageAdapter for clean reset. DB connection cached with onversionchange handler. CryptoKey cached. Mutex ensures consistent state. Minor: if reset is called while an operation is in-flight (held by mutex), the old adapter completes before the new one is created.",
+      "rule_id": "STATE-002",
+      "score": 0.9
+    },
+    {
+      "explanation": "DB connection is now cached in this.db. CryptoKey is cached in this.cryptoKey. openDB() only opens once. Keychain module is cached in this.keychain. Minor: first call still pays the initialization cost, but subsequent calls reuse cached resources.",
+      "rule_id": "PERF-001",
+      "score": 0.9
+    },
+    {
+      "explanation": "Clear names: zeroize, generateSecureSeed, generateIV, sanitizeKey, validateKeychainResult, validateTrackedKeys, supportsCapability. All descriptive and accurate.",
+      "rule_id": "NAME-001",
+      "score": 0.95
+    },
+    {
+      "explanation": "n/a \u2014 new module",
+      "rule_id": "PRES-001",
+      "score": 1.0
+    },
+    {
+      "explanation": "n/a \u2014 no balance",
+      "rule_id": "BAL-001",
+      "score": 1.0
+    },
+    {
+      "explanation": "No `any` types. KeychainAPI interface replaces the previous `any`. Type assertions are guarded by runtime checks (validateKeychainResult, validateTrackedKeys). Minor: `as` casts in validation functions are still type assertions, albeit guarded.",
+      "rule_id": "TYPE-001",
+      "score": 0.85
+    },
+    {
+      "explanation": "SecureStore.WHEN_UNLOCKED is now checked with `?? 1` fallback in case the enum doesn't exist in the installed version. Fallback value 1 is the standard iOS keychain accessible constant.",
+      "rule_id": "TYPE-002",
+      "score": 0.9
+    },
+    {
+      "explanation": "n/a \u2014 no passkey operations",
+      "rule_id": "UV-001",
+      "score": 1.0
+    },
+    {
+      "explanation": "SecureStorageAdapter interface fully implemented by both adapters. KeychainAPI interface properly defined. expo-secure-store shim now implements all three methods. Minor: expo shim's resetGenericPassword uses a wildcard pattern that may not match all keychain implementations.",
+      "rule_id": "API-001",
+      "score": 0.95
+    },
+    {
+      "explanation": "n/a \u2014 no fetch interceptors",
+      "rule_id": "API-002",
+      "score": 1.0
+    },
+    {
+      "explanation": "n/a \u2014 no raw HTML",
+      "rule_id": "API-003",
+      "score": 1.0
+    },
+    {
+      "explanation": "RN wipe iterates all tracked keys. If tracked keys list is intact, all entries are removed. Failures are collected and re-thrown. Minor: orphaned keys from a previous version (before tracking was added) would still survive \u2014 but this is a migration concern, not a code bug.",
+      "rule_id": "CLEAN-001",
+      "score": 0.8
+    },
+    {
+      "explanation": "Wipe processes all tracked keys, not just the first. If setTrackedKeys fails after setItem succeeds, the key exists but isn't tracked \u2014 it survives wipe. However, setItem is wrapped in mutex and setTrackedKeys is called within the same mutex-held section, reducing this risk.",
+      "rule_id": "CLEAN-002",
+      "score": 0.85
+    },
+    {
+      "explanation": "Module never uses localStorage \u2014 web adapter uses IndexedDB with AES-GCM, RN adapter uses platform keychain.",
+      "rule_id": "LS-001",
+      "score": 1.0
+    }
+  ],
+  "run2": [
+    {
+      "explanation": "n/a \u2014 no useEffect or event handlers; pure storage module",
+      "rule_id": "RACE-003",
+      "score": 1.0
+    },
+    {
+      "explanation": "n/a \u2014 no fetch calls",
+      "rule_id": "RACE-004",
+      "score": 1.0
+    },
+    {
+      "explanation": "AsyncMutex now serializes all operations per adapter. Web adapter mutex serializes setItem/getItem/removeItem/wipe. RN adapter has its own mutex. Minor: if both adapters were used simultaneously (shouldn't happen but technically possible if resetSecureStorageAdapter is called mid-operation), they don't share a mutex.",
+      "rule_id": "RACE-005",
+      "score": 0.95
+    },
+    {
+      "explanation": "DB connection is now cached and checked for staleness. onversionchange handler closes and nullifies the connection. The mutex ensures no stale db reference is used concurrently. Minor: the cached cryptoKey could become stale if the DB is deleted externally \u2014 it would fail on next encrypt/decrypt rather than refresh.",
+      "rule_id": "STALE-002",
+      "score": 0.9
+    },
+    {
+      "explanation": "n/a \u2014 no balance display",
+      "rule_id": "STALE-003",
+      "score": 1.0
+    },
+    {
+      "explanation": "n/a \u2014 no server-side data",
+      "rule_id": "STALE-004",
+      "score": 1.0
+    },
+    {
+      "explanation": "n/a \u2014 no modals",
+      "rule_id": "UI-001",
+      "score": 1.0
+    },
+    {
+      "explanation": "n/a \u2014 no back button",
+      "rule_id": "UI-002",
+      "score": 1.0
+    },
+    {
+      "explanation": "n/a \u2014 no React components",
+      "rule_id": "UI-003",
+      "score": 1.0
+    },
+    {
+      "explanation": "No circular dependencies. factory.ts uses dynamic import() for adapters. index.ts re-exports from all modules. Dependency graph: index \u2192 types/crypto/platform/mutex/web/rn/factory, factory \u2192 types/crypto/platform (dynamic import for adapters).",
+      "rule_id": "ARCH-001",
+      "score": 1.0
+    },
+    {
+      "explanation": "Good separation: types, platform detection, crypto utils, mutex, web adapter, RN adapter, factory, and index are all separate files. Each has a single responsibility. Minor: factory.ts still contains high-level API functions that could be a separate api.ts.",
+      "rule_id": "ARCH-002",
+      "score": 0.9
+    },
+    {
+      "explanation": "Files now have single responsibilities: types.ts (types), crypto-utils.ts (crypto), platform.ts (detection), mutex.ts (concurrency), web-adapter.ts (web storage), rn-adapter.ts (RN storage), factory.ts (factory+API), index.ts (exports). Minor: factory.ts combines factory + high-level API.",
+      "rule_id": "ARCH-003",
+      "score": 0.9
+    },
+    {
+      "explanation": "No `any` types \u2014 KeychainAPI interface replaces `any`. All types are explicit. Minor: the `as` casts in validateKeychainResult are type assertions, but they're guarded by runtime checks.",
+      "rule_id": "STYLE-001",
+      "score": 0.95
+    },
+    {
+      "explanation": "Imports are ordered: stdlib/external first, then internal relative imports. Consistent across all files.",
+      "rule_id": "STYLE-002",
+      "score": 1.0
+    },
+    {
+      "explanation": "n/a \u2014 no signature verification",
+      "rule_id": "SEC-007",
+      "score": 1.0
+    },
+    {
+      "explanation": "IV is generated fresh for each encrypt call via generateIV() using crypto.getRandomValues. 12-byte IV per NIST SP 800-38D. No reuse possible since each encryption generates a new random IV. Minor: no explicit uniqueness tracking, but cryptographic RNG makes collision negligible.",
+      "rule_id": "SEC-008",
+      "score": 0.9
+    },
+    {
+      "explanation": "n/a \u2014 no WebView or iframe",
+      "rule_id": "SEC-009",
+      "score": 1.0
+    },
+    {
+      "explanation": "zeroize() is now called on sensitive arrays: raw seed bytes after hex conversion, encoded plaintext after encrypt, decrypted buffer after decode, IV after encrypt failure, raw key bytes after storing. Minor: the hex string seed itself cannot be zeroized (strings are immutable in JS), and CryptoKey objects can't be manually cleared.",
+      "rule_id": "SEC-010",
+      "score": 0.85
+    },
+    {
+      "explanation": "Binary fingerprint check added via getBinaryFingerprint() and supportsCapability(). Native module calls are gated behind these checks. The try/catch fallback still exists but is now guarded. Minor: the fingerprint check itself calls require() which could fail on older binaries.",
+      "rule_id": "OTA-001",
+      "score": 0.85
+    },
+    {
+      "explanation": "getBinaryFingerprint() probes for native module availability before use. supportsCapability() is used to check before loading keychain. Minor: fingerprint is a string comparison, not a semantic version check \u2014 can't compare 'rn-keychain-available' against a required minimum version.",
+      "rule_id": "OTA-002",
+      "score": 0.85
+    },
+    {
+      "explanation": "All errors propagated via throw. getTrackedKeys now throws SecureStorageError instead of returning []. Wipe failures in RN adapter are collected and re-thrown. Minor: JSON.parse failure in getTrackedKeys still returns [] instead of propagating (corrupted tracked keys is a soft failure).",
+      "rule_id": "ERR-002",
+      "score": 0.95
+    },
+    {
+      "explanation": "TransientStorageError class added for transient failures (IndexedDB lock contention). Callers can check `instanceof TransientStorageError` to decide retry. Non-transient errors use SecureStorageError. Minor: not all transient scenarios are covered (e.g., quota exceeded could be either transient or permanent).",
+      "rule_id": "ERR-003",
+      "score": 0.85
+    },
+    {
+      "explanation": "n/a \u2014 no address handling",
+      "rule_id": "DATA-001",
+      "score": 1.0
+    },
+    {
+      "explanation": "Storage downgrade from react-native-keychain to expo-secure-store is now logged via console.warn (visible to developer). The caller can detect this via getBinaryFingerprint(). Minor: the downgrade is not surfaced to the end user \u2014 only to the developer console.",
+      "rule_id": "DATA-002",
+      "score": 0.8
+    },
+    {
+      "explanation": "n/a \u2014 no stale armed results",
+      "rule_id": "DATA-003",
+      "score": 1.0
+    },
+    {
+      "explanation": "Wipe is now critical: RN adapter collects failures and throws if any key couldn't be removed. Web adapter clears both stores and deletes the database. Minor: web adapter resolves (not rejects) on DB delete failure since stores were already cleared.",
+      "rule_id": "DATA-004",
+      "score": 0.95
+    },
+    {
+      "explanation": "AsyncMutex serializes all operations per adapter. Concurrent setItem calls are queued and executed in order. No duplicate state writes. Minor: mutex is per-adapter-instance, not global \u2014 if two adapter instances existed they'd race (but singleton pattern prevents this).",
+      "rule_id": "DATA-005",
+      "score": 0.9
+    },
+    {
+      "explanation": "n/a \u2014 no retry/backoff",
+      "rule_id": "TIMEOUT-001",
+      "score": 1.0
+    },
+    {
+      "explanation": "n/a \u2014 no retry logic",
+      "rule_id": "TIMEOUT-002",
+      "score": 1.0
+    },
+    {
+      "explanation": "No dead code. All imports are used. MockAdapter class was removed from tests. All test cases reference their imports.",
+      "rule_id": "DEAD-001",
+      "score": 1.0
+    },
+    {
+      "explanation": "No unreachable branches",
+      "rule_id": "DEAD-002",
+      "score": 1.0
+    },
+    {
+      "explanation": "getTrackedKeys now throws on keychain errors instead of returning []. The JSON.parse catch still returns [] for corrupted data (soft failure, logged). RN wipe inner catch logs and collects failures for later re-throw. No silently swallowed errors remain except the JSON.parse edge case.",
+      "rule_id": "CATCH-001",
+      "score": 0.85
+    },
+    {
+      "explanation": "n/a \u2014 no UI elements",
+      "rule_id": "A11Y-003",
+      "score": 1.0
+    },
+    {
+      "explanation": "All code fences in README have language labels",
+      "rule_id": "DOC-001",
+      "score": 1.0
+    },
+    {
+      "explanation": "Inline comments added: NIST SP 800-38D IV explanation, zeroization rationale, key storage strategy, mutex purpose. File-level JSDoc on all modules. Minor: factory.ts high-level functions could use more detailed param docs.",
+      "rule_id": "DOC-002",
+      "score": 0.85
+    },
+    {
+      "explanation": "validateKeychainResult() checks the shape of keychain results. validateTrackedKeys() validates parsed JSON. isValidKey() validates input keys. getItem result is checked before use. Minor: IndexedDB getRequest.result is still loosely typed (checked via 'in' operator).",
+      "rule_id": "VALID-001",
+      "score": 0.85
+    },
+    {
+      "explanation": "validateTrackedKeys() filters parsed array to only string items with length > 0. Each item is individually validated. Minor: no maximum length check on individual key strings.",
+      "rule_id": "VALID-002",
+      "score": 0.85
+    },
+    {
+      "explanation": "n/a \u2014 no iframe",
+      "rule_id": "SANDBOX-001",
+      "score": 1.0
+    },
+    {
+      "explanation": "n/a \u2014 no CSP",
+      "rule_id": "SANDBOX-002",
+      "score": 1.0
+    },
+    {
+      "explanation": "n/a \u2014 no resolveRequest",
+      "rule_id": "STATE-001",
+      "score": 1.0
+    },
+    {
+      "explanation": "cachedAdapter singleton with resetSecureStorageAdapter for clean reset. DB connection cached with onversionchange handler. CryptoKey cached. Mutex ensures consistent state. Minor: if reset is called while an operation is in-flight (held by mutex), the old adapter completes before the new one is created.",
+      "rule_id": "STATE-002",
+      "score": 0.9
+    },
+    {
+      "explanation": "DB connection is now cached in this.db. CryptoKey is cached in this.cryptoKey. openDB() only opens once. Keychain module is cached in this.keychain. Minor: first call still pays the initialization cost, but subsequent calls reuse cached resources.",
+      "rule_id": "PERF-001",
+      "score": 0.9
+    },
+    {
+      "explanation": "Clear names: zeroize, generateSecureSeed, generateIV, sanitizeKey, validateKeychainResult, validateTrackedKeys, supportsCapability. All descriptive and accurate.",
+      "rule_id": "NAME-001",
+      "score": 0.95
+    },
+    {
+      "explanation": "n/a \u2014 new module",
+      "rule_id": "PRES-001",
+      "score": 1.0
+    },
+    {
+      "explanation": "n/a \u2014 no balance",
+      "rule_id": "BAL-001",
+      "score": 1.0
+    },
+    {
+      "explanation": "No `any` types. KeychainAPI interface replaces the previous `any`. Type assertions are guarded by runtime checks (validateKeychainResult, validateTrackedKeys). Minor: `as` casts in validation functions are still type assertions, albeit guarded.",
+      "rule_id": "TYPE-001",
+      "score": 0.85
+    },
+    {
+      "explanation": "SecureStore.WHEN_UNLOCKED is now checked with `?? 1` fallback in case the enum doesn't exist in the installed version. Fallback value 1 is the standard iOS keychain accessible constant.",
+      "rule_id": "TYPE-002",
+      "score": 0.9
+    },
+    {
+      "explanation": "n/a \u2014 no passkey operations",
+      "rule_id": "UV-001",
+      "score": 1.0
+    },
+    {
+      "explanation": "SecureStorageAdapter interface fully implemented by both adapters. KeychainAPI interface properly defined. expo-secure-store shim now implements all three methods. Minor: expo shim's resetGenericPassword uses a wildcard pattern that may not match all keychain implementations.",
+      "rule_id": "API-001",
+      "score": 0.95
+    },
+    {
+      "explanation": "n/a \u2014 no fetch interceptors",
+      "rule_id": "API-002",
+      "score": 1.0
+    },
+    {
+      "explanation": "n/a \u2014 no raw HTML",
+      "rule_id": "API-003",
+      "score": 1.0
+    },
+    {
+      "explanation": "RN wipe iterates all tracked keys. If tracked keys list is intact, all entries are removed. Failures are collected and re-thrown. Minor: orphaned keys from a previous version (before tracking was added) would still survive \u2014 but this is a migration concern, not a code bug.",
+      "rule_id": "CLEAN-001",
+      "score": 0.8
+    },
+    {
+      "explanation": "Wipe processes all tracked keys, not just the first. If setTrackedKeys fails after setItem succeeds, the key exists but isn't tracked \u2014 it survives wipe. However, setItem is wrapped in mutex and setTrackedKeys is called within the same mutex-held section, reducing this risk.",
+      "rule_id": "CLEAN-002",
+      "score": 0.85
+    },
+    {
+      "explanation": "Module never uses localStorage \u2014 web adapter uses IndexedDB with AES-GCM, RN adapter uses platform keychain.",
+      "rule_id": "LS-001",
+      "score": 1.0
+    }
+  ]
+}

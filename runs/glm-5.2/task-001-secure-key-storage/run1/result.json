@@ -1,0 +1,753 @@
+{
+  "benchmark_lane": "diagnostic_self_assessed_retry",
+  "issue": "Title: Implement a secure key storage module for the Nuri wallet\n\nDescription:\nWe need a module that securely stores the wallet's signing key using the platform's\nsecure enclave / keychain. The module must:\n\n1. Generate a cryptographically secure random seed\n2. Store it in the platform keychain (NOT localStorage)\n3. Provide a wipe function that removes ALL keychain entries\n4. Handle errors gracefully \u2014 if storage fails, surface the error to the user\n5. Work in both React Native and PWA (web) con",
+  "judge": {
+    "id": "glm-5.2",
+    "kind": "self_assessed"
+  },
+  "mode": "static+external-judge",
+  "results": [
+    {
+      "agent_id": "glm-5.2-run1",
+      "categories": {
+        "accessibility": {
+          "emphasis": 0.84,
+          "findings": [],
+          "global_penalty": 0.0,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "llm_assessments": 1,
+          "llm_scores": [
+            {
+              "explanation": "n/a \u2014 no interactive UI elements",
+              "rule_id": "A11Y-003",
+              "rule_name": "ARIA labels on interactive elements",
+              "score": 1.0
+            }
+          ],
+          "raw_penalty": 0.0,
+          "score": 100.0,
+          "static_findings": 0,
+          "weight": 0.04
+        },
+        "api_correctness": {
+          "emphasis": 0.5,
+          "findings": [],
+          "global_penalty": 1.0,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "llm_assessments": 3,
+          "llm_scores": [
+            {
+              "explanation": "SecureStorageAdapter interface is properly implemented by both adapters. Minor: the expo-secure-store shim doesn't fully implement the keychain API surface (resetGenericPassword throws).",
+              "rule_id": "API-001",
+              "rule_name": "Implement required interfaces",
+              "score": 0.9
+            },
+            {
+              "explanation": "n/a \u2014 no fetch/XMLHttpRequest interceptors",
+              "rule_id": "API-002",
+              "rule_name": "Handle URL objects in interceptors",
+              "score": 1.0
+            },
+            {
+              "explanation": "n/a \u2014 no raw HTML files",
+              "rule_id": "API-003",
+              "rule_name": "Correct HTML attributes",
+              "score": 1.0
+            }
+          ],
+          "raw_penalty": 2.0,
+          "score": 92.0,
+          "static_findings": 0,
+          "weight": 0.02
+        },
+        "architecture": {
+          "emphasis": 1.68,
+          "findings": [],
+          "global_penalty": 3.69,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "llm_assessments": 3,
+          "llm_scores": [
+            {
+              "explanation": "No circular dependencies \u2014 index.ts imports from secureKeyStorage.ts, no reverse imports",
+              "rule_id": "ARCH-001",
+              "rule_name": "Circular dependency",
+              "score": 1.0
+            },
+            {
+              "explanation": "The main file mixes platform detection, crypto utilities, two storage adapters, factory, and high-level API all in one ~400-line file. Adapters and crypto utils should be separate modules.",
+              "rule_id": "ARCH-002",
+              "rule_name": "Separation of concerns",
+              "score": 0.5
+            },
+            {
+              "explanation": "secureKeyStorage.ts has multiple responsibilities: type definitions, platform detection, crypto helpers, web adapter, RN adapter, factory, and high-level API. Should be split into types.ts, platform.t",
+              "rule_id": "ARCH-003",
+              "rule_name": "Module structure",
+              "score": 0.4
+            }
+          ],
+          "raw_penalty": 2.2,
+          "score": 91.2,
+          "static_findings": 0,
+          "weight": 0.08
+        },
+        "balance_sync": {
+          "emphasis": 0.5,
+          "findings": [],
+          "global_penalty": 0.0,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "llm_assessments": 1,
+          "llm_scores": [
+            {
+              "explanation": "n/a \u2014 no balance display",
+              "rule_id": "BAL-001",
+              "rule_name": "Balance display matches actual state",
+              "score": 1.0
+            }
+          ],
+          "raw_penalty": 0.0,
+          "score": 100.0,
+          "static_findings": 0,
+          "weight": 0.02
+        },
+        "code_style": {
+          "emphasis": 1.05,
+          "findings": [],
+          "global_penalty": 0.21,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "llm_assessments": 2,
+          "llm_scores": [
+            {
+              "explanation": "Code is generally ESLint-clean; minor: `any` type for keychain in RN adapter would trigger @typescript-eslint/no-explicit-any.",
+              "rule_id": "STYLE-001",
+              "rule_name": "ESLint compliance",
+              "score": 0.9
+            },
+            {
+              "explanation": "Imports are minimal and properly ordered \u2014 only internal relative imports.",
+              "rule_id": "STYLE-002",
+              "rule_name": "Import ordering",
+              "score": 1.0
+            }
+          ],
+          "raw_penalty": 0.2,
+          "score": 99.2,
+          "static_findings": 0,
+          "weight": 0.05
+        },
+        "data_integrity": {
+          "emphasis": 1.26,
+          "findings": [],
+          "global_penalty": 10.57,
+          "hard_gate": true,
+          "hard_gate_triggered": false,
+          "llm_assessments": 5,
+          "llm_scores": [
+            {
+              "explanation": "n/a \u2014 no address handling in this module",
+              "rule_id": "DATA-001",
+              "rule_name": "Unify address sources",
+              "score": 1.0
+            },
+            {
+              "explanation": "RN adapter silently falls back from react-native-keychain to expo-secure-store. This is a storage downgrade \u2014 expo-secure-store has different security properties (e.g., no keychain hardware backing on",
+              "rule_id": "DATA-002",
+              "rule_name": "No silent storage downgrade",
+              "score": 0.4
+            },
+            {
+              "explanation": "n/a \u2014 no stale armed results pattern",
+              "rule_id": "DATA-003",
+              "rule_name": "Clear stale armed results",
+              "score": 1.0
+            },
+            {
+              "explanation": "Critical operations throw on failure. Minor: wipe() in RN adapter continues past individual key deletion failures (line ~310) \u2014 a failed wipe of a specific key is logged but not fatal.",
+              "rule_id": "DATA-004",
+              "rule_name": "Make failed critical operations fatal",
+              "score": 0.9
+            },
+            {
+              "explanation": "No deduplication of concurrent operations. Two concurrent setItem('wallet-seed', value1) and setItem('wallet-seed', value2) calls will race \u2014 the last one to complete wins, with no ordering guarantee.",
+              "rule_id": "DATA-005",
+              "rule_name": "Deduplicate sync requests",
+              "score": 0.3
+            }
+          ],
+          "raw_penalty": 8.4,
+          "score": 66.4,
+          "static_findings": 0,
+          "weight": 0.06
+        },
+        "dead_code": {
+          "emphasis": 0.63,
+          "findings": [],
+          "global_penalty": 0.63,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "llm_assessments": 2,
+          "llm_scores": [
+            {
+              "explanation": "MockAdapter class in test file is declared but never used in any test case. The SecureStorageAdapter import in the test file is only used as a type for MockAdapter.",
+              "rule_id": "DEAD-001",
+              "rule_name": "No dead code or unused imports",
+              "score": 0.5
+            },
+            {
+              "explanation": "No unreachable code \u2014 all branches have reachable paths",
+              "rule_id": "DEAD-002",
+              "rule_name": "No unreachable branches",
+              "score": 1.0
+            }
+          ],
+          "raw_penalty": 1.0,
+          "score": 96.0,
+          "static_findings": 0,
+          "weight": 0.03
+        },
+        "documentation": {
+          "emphasis": 0.5,
+          "findings": [],
+          "global_penalty": 0.5,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "llm_assessments": 2,
+          "llm_scores": [
+            {
+              "explanation": "Code fences in README.md have language labels (typescript, bash)",
+              "rule_id": "DOC-001",
+              "rule_name": "Label code fences in docs",
+              "score": 1.0
+            },
+            {
+              "explanation": "AES-GCM encryption/decryption lacks inline comments explaining why 12-byte IV is used (NIST recommendation for GCM mode). The key derivation/storage strategy isn't documented. The singleton pattern in",
+              "rule_id": "DOC-002",
+              "rule_name": "Document complex logic",
+              "score": 0.5
+            }
+          ],
+          "raw_penalty": 1.0,
+          "score": 96.0,
+          "static_findings": 0,
+          "weight": 0.02
+        },
+        "error_handling": {
+          "emphasis": 1.26,
+          "findings": [],
+          "global_penalty": 3.02,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "llm_assessments": 2,
+          "llm_scores": [
+            {
+              "explanation": "Errors are generally propagated via throw with SecureStorageError wrappers. Minor: getTrackedKeys() swallows errors and returns [] instead of propagating.",
+              "rule_id": "ERR-002",
+              "rule_name": "Error propagation",
+              "score": 0.9
+            },
+            {
+              "explanation": "No distinction between transient and non-transient failures. A failed setItem due to invalid input (non-transient) is treated the same as a transient IndexedDB lock failure. Callers cannot distinguish",
+              "rule_id": "ERR-003",
+              "rule_name": "Non-transient failure handling",
+              "score": 0.7
+            }
+          ],
+          "raw_penalty": 2.4,
+          "score": 90.4,
+          "static_findings": 0,
+          "weight": 0.06
+        },
+        "incomplete_cleanup": {
+          "emphasis": 0.5,
+          "findings": [],
+          "global_penalty": 3.6,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "llm_assessments": 2,
+          "llm_scores": [
+            {
+              "explanation": "RN adapter wipe() only removes tracked keys. If keys were stored by a previous version that didn't track them, or if the tracked_keys entry is corrupted/deleted, those orphaned keychain entries surviv",
+              "rule_id": "CLEAN-001",
+              "rule_name": "Complete keychain wipe",
+              "score": 0.3
+            },
+            {
+              "explanation": "wipe() iterates all tracked keys, but relies on the tracked keys list being complete and accurate. If setItem was called but setTrackedKeys failed, the key exists in keychain but not in the tracked li",
+              "rule_id": "CLEAN-002",
+              "rule_name": "Sweep all items, not just first",
+              "score": 0.5
+            }
+          ],
+          "raw_penalty": 7.2,
+          "score": 71.2,
+          "static_findings": 0,
+          "weight": 0.01
+        },
+        "localstorage_secret": {
+          "emphasis": 0.5,
+          "findings": [],
+          "global_penalty": 0.0,
+          "hard_gate": true,
+          "hard_gate_triggered": false,
+          "llm_assessments": 1,
+          "llm_scores": [
+            {
+              "explanation": "Module never uses localStorage \u2014 web adapter uses IndexedDB with AES-GCM encryption, RN adapter uses platform keychain.",
+              "rule_id": "LS-001",
+              "rule_name": "No private keys in localStorage (duplicate hard gate)",
+              "score": 1.0
+            }
+          ],
+          "raw_penalty": 0.0,
+          "score": 100.0,
+          "static_findings": 0,
+          "weight": 0.01
+        },
+        "missing_validation": {
+          "emphasis": 0.63,
+          "findings": [],
+          "global_penalty": 5.66,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "llm_assessments": 2,
+          "llm_scores": [
+            {
+              "explanation": "No validation of data returned from external sources. keychain.getGenericPassword() result is used without checking its shape \u2014 assumes it has a .password property. The expo-secure-store wrapper assum",
+              "rule_id": "VALID-001",
+              "rule_name": "Runtime validation at external boundaries",
+              "score": 0.3
+            },
+            {
+              "explanation": "trackedKeys from JSON.parse(result.password) is not validated per-item. If the stored JSON is corrupted or contains non-string entries, the wipe() method will iterate invalid data. No schema validatio",
+              "rule_id": "VALID-002",
+              "rule_name": "Per-item validation in arrays",
+              "score": 0.2
+            }
+          ],
+          "raw_penalty": 9.0,
+          "score": 64.0,
+          "static_findings": 0,
+          "weight": 0.03
+        },
+        "naming_convention": {
+          "emphasis": 0.5,
+          "findings": [],
+          "global_penalty": 0.1,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "llm_assessments": 1,
+          "llm_scores": [
+            {
+              "explanation": "Names are generally clear. Minor: keyNameForKey is a bit redundant; sanitizeKey would be clearer. loadKeychain does more than load \u2014 it also sets up fallbacks.",
+              "rule_id": "NAME-001",
+              "rule_name": "Clear naming",
+              "score": 0.9
+            }
+          ],
+          "raw_penalty": 0.2,
+          "score": 99.2,
+          "static_findings": 0,
+          "weight": 0.02
+        },
+        "ota_native_boundary": {
+          "emphasis": 1.26,
+          "findings": [],
+          "global_penalty": 17.86,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "llm_assessments": 2,
+          "llm_scores": [
+            {
+              "explanation": "RN adapter calls require('react-native-keychain') which is a native module. If an OTA update ships JS that references a native module not in the current binary, it crashes. The try/catch fallback to e",
+              "rule_id": "OTA-001",
+              "rule_name": "Native module call in OTA-shippable code",
+              "score": 0.5
+            },
+            {
+              "explanation": "No binary fingerprint or version check before calling native APIs. The code assumes react-native-keychain or expo-secure-store is available without checking the native binary version. An OTA update co",
+              "rule_id": "OTA-002",
+              "rule_name": "Fingerprint compatibility check",
+              "score": 0.3
+            }
+          ],
+          "raw_penalty": 14.2,
+          "score": 43.2,
+          "static_findings": 0,
+          "weight": 0.06
+        },
+        "performance": {
+          "emphasis": 0.5,
+          "findings": [],
+          "global_penalty": 2.1,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "llm_assessments": 1,
+          "llm_scores": [
+            {
+              "explanation": "openDB() is called on every setItem, getItem, and removeItem \u2014 each call opens a new IDBDatabase connection. The database connection should be cached/reused. getOrCreateEncryptionKey() also opens DB a",
+              "rule_id": "PERF-001",
+              "rule_name": "Don't initialize expensive resources on every call",
+              "score": 0.3
+            }
+          ],
+          "raw_penalty": 4.2,
+          "score": 83.2,
+          "static_findings": 0,
+          "weight": 0.02
+        },
+        "preserve_behavior": {
+          "emphasis": 0.5,
+          "findings": [],
+          "global_penalty": 0.0,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "llm_assessments": 1,
+          "llm_scores": [
+            {
+              "explanation": "n/a \u2014 new module, no existing behavior to preserve",
+              "rule_id": "PRES-001",
+              "rule_name": "Don't break existing behavior",
+              "score": 1.0
+            }
+          ],
+          "raw_penalty": 0.0,
+          "score": 100.0,
+          "static_findings": 0,
+          "weight": 0.02
+        },
+        "race_condition": {
+          "emphasis": 2.0,
+          "findings": [],
+          "global_penalty": 28.0,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "llm_assessments": 3,
+          "llm_scores": [
+            {
+              "explanation": "n/a \u2014 no useEffect or event handlers; this is a storage module, not a React component",
+              "rule_id": "RACE-003",
+              "rule_name": "Async operation without cancellation",
+              "score": 1.0
+            },
+            {
+              "explanation": "n/a \u2014 no fetch calls in the module",
+              "rule_id": "RACE-004",
+              "rule_name": "Missing AbortController for fetch",
+              "score": 1.0
+            },
+            {
+              "explanation": "WebSecureStorageAdapter.getOrCreateEncryptionKey (line ~120) has a race: two concurrent calls can both see no master-key and both generate+store one. The IDB readwrite transaction doesn't prevent this",
+              "rule_id": "RACE-005",
+              "rule_name": "Concurrent state mutation",
+              "score": 0.3
+            }
+          ],
+          "raw_penalty": 14.0,
+          "score": 44.0,
+          "static_findings": 0,
+          "weight": 0.18
+        },
+        "security_crypto": {
+          "emphasis": 2.0,
+          "findings": [
+            {
+              "file": "README.md",
+              "line": 7,
+              "match": "Math.random(",
+              "rule_id": "SEC-003",
+              "rule_name": "No Math.random for crypto",
+              "severity": "critical"
+            },
+            {
+              "file": "README.md",
+              "line": 25,
+              "match": "Math.random(",
+              "rule_id": "SEC-003",
+              "rule_name": "No Math.random for crypto",
+              "severity": "critical"
+            },
+            {
+              "file": "README.md",
+              "line": 27,
+              "match": "eval(",
+              "rule_id": "SEC-004",
+              "rule_name": "No eval or Function constructor",
+              "severity": "critical"
+            },
+            {
+              "file": "src/secure-key-storage/secureKeyStorage.ts",
+              "line": 512,
+              "match": "seed:\", err);\n    throw new SecureStorageError(\"",
+              "rule_id": "SEC-002",
+              "rule_name": "No hardcoded secrets",
+              "severity": "critical"
+            },
+            {
+              "file": "src/secure-key-storage/secureKeyStorage.ts",
+              "line": 523,
+              "match": "seed:\", err);\n    throw new SecureStorageError(\"",
+              "rule_id": "SEC-002",
+              "rule_name": "No hardcoded secrets",
+              "severity": "critical"
+            }
+          ],
+          "global_penalty": 181.6,
+          "hard_gate": true,
+          "hard_gate_triggered": true,
+          "llm_assessments": 4,
+          "llm_scores": [
+            {
+              "explanation": "n/a \u2014 no signature verification in this module",
+              "rule_id": "SEC-007",
+              "rule_name": "Signature verification",
+              "score": 1.0
+            },
+            {
+              "explanation": "AES-GCM IV is generated via crypto.getRandomValues (12 bytes) which is cryptographically random, but there's no explicit uniqueness check before use. If the RNG produced a duplicate IV (astronomically",
+              "rule_id": "SEC-008",
+              "rule_name": "No nonce reuse",
+              "score": 0.7
+            },
+            {
+              "explanation": "n/a \u2014 no WebView or iframe content",
+              "rule_id": "SEC-009",
+              "rule_name": "Sandbox WebView/iframe content",
+              "score": 1.0
+            },
+            {
+              "explanation": "Critical: Uint8Array from getRandomValues, the encrypted ciphertext, IV, and TextEncoder output are never zeroed after use. The seed hex string persists in memory. No explicit memory wiping (fill(0) o",
+              "rule_id": "SEC-010",
+              "rule_name": "Missing zeroization of sensitive data",
+              "score": 0.2
+            }
+          ],
+          "raw_penalty": 90.8,
+          "score": 0.0,
+          "static_findings": 5,
+          "weight": 0.1
+        },
+        "silent_catch": {
+          "emphasis": 0.84,
+          "findings": [],
+          "global_penalty": 3.52,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "llm_assessments": 1,
+          "llm_scores": [
+            {
+              "explanation": "getTrackedKeys() catch block (line ~330) returns [] instead of propagating \u2014 this swallows storage errors. RN adapter wipe() inner catch (line ~310) logs but doesn't propagate individual key wipe fail",
+              "rule_id": "CATCH-001",
+              "rule_name": "Silent catch (LLM check for context)",
+              "score": 0.3
+            }
+          ],
+          "raw_penalty": 4.2,
+          "score": 83.2,
+          "static_findings": 0,
+          "weight": 0.04
+        },
+        "stale_state": {
+          "emphasis": 2.0,
+          "findings": [],
+          "global_penalty": 6.0,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "llm_assessments": 3,
+          "llm_scores": [
+            {
+              "explanation": "In openDB(), the db reference returned is used after the Promise resolves, but another concurrent operation could close or delete the database (wipe() calls db.close() then indexedDB.deleteDatabase). ",
+              "rule_id": "STALE-002",
+              "rule_name": "Cached data used after async gap",
+              "score": 0.5
+            },
+            {
+              "explanation": "n/a \u2014 no balance display in this module",
+              "rule_id": "STALE-003",
+              "rule_name": "Ghost balance display",
+              "score": 1.0
+            },
+            {
+              "explanation": "n/a \u2014 no server-side data that needs refetch on focus/reconnect",
+              "rule_id": "STALE-004",
+              "rule_name": "Missing refetch on focus/reconnect",
+              "score": 1.0
+            }
+          ],
+          "raw_penalty": 3.0,
+          "score": 88.0,
+          "static_findings": 0,
+          "weight": 0.15
+        },
+        "state_management": {
+          "emphasis": 0.63,
+          "findings": [],
+          "global_penalty": 0.75,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "llm_assessments": 2,
+          "llm_scores": [
+            {
+              "explanation": "n/a \u2014 no resolveRequest pattern",
+              "rule_id": "STATE-001",
+              "rule_name": "No recursive resolveRequest",
+              "score": 1.0
+            },
+            {
+              "explanation": "cachedAdapter singleton could get out of sync with platform state. If resetSecureStorageAdapter() is called but a reference to the old adapter is held, operations on the old adapter could conflict wit",
+              "rule_id": "STATE-002",
+              "rule_name": "State synchronization",
+              "score": 0.8
+            }
+          ],
+          "raw_penalty": 1.2,
+          "score": 95.2,
+          "static_findings": 0,
+          "weight": 0.03
+        },
+        "timeout_retry": {
+          "emphasis": 0.84,
+          "findings": [],
+          "global_penalty": 0.0,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "llm_assessments": 2,
+          "llm_scores": [
+            {
+              "explanation": "n/a \u2014 no retry/backoff logic in the module",
+              "rule_id": "TIMEOUT-001",
+              "rule_name": "Preserve timeout backoff on failures",
+              "score": 1.0
+            },
+            {
+              "explanation": "n/a \u2014 no retry logic that could swallow non-transient failures",
+              "rule_id": "TIMEOUT-002",
+              "rule_name": "Re-throw non-transient failures",
+              "score": 1.0
+            }
+          ],
+          "raw_penalty": 0.0,
+          "score": 100.0,
+          "static_findings": 0,
+          "weight": 0.04
+        },
+        "type_safety": {
+          "emphasis": 0.5,
+          "findings": [],
+          "global_penalty": 1.5,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "llm_assessments": 2,
+          "llm_scores": [
+            {
+              "explanation": "keychain: any in ReactNativeSecureStorageAdapter is an unsafe type. getRequest.result is untyped in the web adapter. The expo-secure-store shim object is untyped. No type guards on external data.",
+              "rule_id": "TYPE-001",
+              "rule_name": "No unsafe type casts",
+              "score": 0.4
+            },
+            {
+              "explanation": "Uses SecureStore.WHEN_UNLOCKED which is a valid expo-secure-store option, but doesn't verify the enum exists at runtime. If the expo-secure-store version doesn't export WHEN_UNLOCKED, it would be unde",
+              "rule_id": "TYPE-002",
+              "rule_name": "Correct enum usage",
+              "score": 0.7
+            }
+          ],
+          "raw_penalty": 3.0,
+          "score": 88.0,
+          "static_findings": 0,
+          "weight": 0.02
+        },
+        "ui_component": {
+          "emphasis": 1.68,
+          "findings": [],
+          "global_penalty": 0.0,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "llm_assessments": 3,
+          "llm_scores": [
+            {
+              "explanation": "n/a \u2014 no modals or overlay layers",
+              "rule_id": "UI-001",
+              "rule_name": "Modal layer isolation",
+              "score": 1.0
+            },
+            {
+              "explanation": "n/a \u2014 no back button handling",
+              "rule_id": "UI-002",
+              "rule_name": "Back handler on layers",
+              "score": 1.0
+            },
+            {
+              "explanation": "n/a \u2014 no React components with props",
+              "rule_id": "UI-003",
+              "rule_name": "Component prop correctness",
+              "score": 1.0
+            }
+          ],
+          "raw_penalty": 0.0,
+          "score": 100.0,
+          "static_findings": 0,
+          "weight": 0.08
+        },
+        "user_verification": {
+          "emphasis": 0.5,
+          "findings": [],
+          "global_penalty": 0.0,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "llm_assessments": 1,
+          "llm_scores": [
+            {
+              "explanation": "n/a \u2014 no passkey operations in this module",
+              "rule_id": "UV-001",
+              "rule_name": "User verification on passkey operations",
+              "score": 1.0
+            }
+          ],
+          "raw_penalty": 0.0,
+          "score": 100.0,
+          "static_findings": 0,
+          "weight": 0.02
+        },
+        "webview_sandbox": {
+          "emphasis": 0.63,
+          "findings": [],
+          "global_penalty": 0.0,
+          "hard_gate": false,
+          "hard_gate_triggered": false,
+          "llm_assessments": 2,
+          "llm_scores": [
+            {
+              "explanation": "n/a \u2014 no iframe content",
+              "rule_id": "SANDBOX-001",
+              "rule_name": "Sandbox iframe content",
+              "score": 1.0
+            },
+            {
+              "explanation": "n/a \u2014 no CSP headers to set (module-level code)",
+              "rule_id": "SANDBOX-002",
+              "rule_name": "Content Security Policy",
+              "score": 1.0
+            }
+          ],
+          "raw_penalty": 0.0,
+          "score": 100.0,
+          "static_findings": 0,
+          "weight": 0.03
+        }
+      },
+      "files_analyzed": 4,
+      "hard_gate_capped": false,
+      "lines_analyzed": 648,
+      "total_penalty": 270.32,
+      "total_score": 0.0,
+      "verdict": "FAIL"
+    }
+  ],
+  "rubric_version": "2.1.0",
+  "score_model": "global-penalty-v2"
+}

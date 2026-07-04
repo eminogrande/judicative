@@ -1,0 +1,15 @@
+{
+  "agent_id": "glm-5.2",
+  "benchmark_lane": "diagnostic_self_assessed_retry",
+  "generated_at": "2026-07-04T10:12:08+00:00",
+  "judge": {
+    "id": "glm-5.2",
+    "kind": "self_assessed"
+  },
+  "mode": "static+external-judge",
+  "rubric": "rubric_v2.json",
+  "run_id": "run1",
+  "solution_dir": "runs/glm-5.2/task-001-secure-key-storage/run1/solution",
+  "task_id": "task-001-secure-key-storage",
+  "task_json": "runs/glm-5.2/task-001-secure-key-storage/run1/task.json"
+}
