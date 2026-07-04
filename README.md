@@ -240,6 +240,27 @@ python3 judge.py --task task.json --rubric rubric_v2.json --report-md report.md
 python3 judge.py --task task.json --rubric rubric_v2.json --static-only --assessments assessments.json
 ```
 
+### Blind panel — a review committee on top of the score
+
+`panel.py` simulates an anonymous human review committee as a second, independent opinion next to the deterministic score:
+
+```bash
+# 1. Blind the submissions (labels = content hashes; author mapping written SEALED elsewhere)
+python3 panel.py prepare --issue tasks/task-001-secure-key-storage/issue.md \
+    --solutions runs/agent-x/run1/ runs/agent-y/run1/ test_fixtures/solution_bad/ \
+    --rubric rubric_v2.json --out panel_run/ --mapping-out /sealed/mapping.json
+
+# 2. Give panel_run/packet.md to N independent judges (LLMs, agents, humans).
+#    Each returns a JSON verdict: holistic 0-100 + per-rule deductions + ranking.
+
+# 3. Aggregate: per-rule MEDIAN (one outlier judge can't swing it), holistic median,
+#    disagreement table, pairwise ranking agreement — then unblind.
+python3 panel.py aggregate --dir panel_run/ --mapping /sealed/mapping.json \
+    --judges j1.json j2.json j3.json --rubric rubric_v2.json --report PANEL_REPORT.md
+```
+
+Mix known-good/known-bad fixture solutions into the packet as **controls**: a judge who passes the known-bad submission has disqualified itself. See [PANEL_REPORT.md](PANEL_REPORT.md) for a real 3-judge blind panel over the committed runs.
+
 ### MCP server — point any LLM at the test
 
 ```bash

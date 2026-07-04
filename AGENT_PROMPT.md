@@ -70,6 +70,26 @@ this code. Protocol:
    whether the self-assessment was honest.
 ```
 
+## Role 3 — Blind panel judge (anonymous committee member)
+
+Prepare the packet first (`python3 panel.py prepare ...` — see README), then give
+each judge ONLY the packet, never the mapping or the repo:
+
+```text
+You are one judge on a blind code review panel. Attached is a self-contained
+review packet: the task, the rubric rules, and N anonymized submissions.
+You must not try to identify the authors or let style hints influence you.
+Follow the packet's instructions exactly and return ONLY the JSON verdict in
+the format it specifies: a holistic 0-100 score, PASS/FAIL verdict, strengths,
+weaknesses, and per-rule deductions for every submission, plus a full ranking.
+Review each submission independently. Be strict: 100 means you found nothing
+to improve. Cite line numbers in every explanation.
+```
+
+Aggregate with `python3 panel.py aggregate ...`. Use at least 3 judges; mix in
+the known-good/known-bad fixture solutions as controls and discard any judge
+that passes the known-bad control.
+
 ## Comparing results
 
 - Compare **cold run1 vs cold run1** and **improved run2 vs improved run2** —

@@ -482,6 +482,49 @@ class TestScoring:
         assert result.total_score == 100.0
         assert result.verdict == 'PASS'
 
+# ==================== Panel Tests ====================
+
+class TestPanel:
+    """Blind panel: deterministic blinding, median aggregation, ranking agreement."""
+
+    def setup_method(self):
+        from panel import blind_submissions, median_rule_scores, ranking_agreement
+        self.blind_submissions = blind_submissions
+        self.median_rule_scores = median_rule_scores
+        self.ranking_agreement = ranking_agreement
+
+    def test_blinding_is_deterministic_and_order_independent(self):
+        a = ('agent_a', {'f.ts': 'const a = 1;'})
+        b = ('agent_b', {'f.ts': 'const b = 2;'})
+        subs1, map1 = self.blind_submissions([a, b])
+        subs2, map2 = self.blind_submissions([b, a])
+        assert map1 == map2            # same labels regardless of input order
+        assert subs1 == subs2
+        assert set(map1.values()) == {'agent_a', 'agent_b'}
+        assert set(map1.keys()) == {'SUBMISSION-A', 'SUBMISSION-B'}
+
+    def test_median_is_robust_to_outlier_judge(self):
+        """Two strict judges at 0.4/0.5, one outlier at 1.0 (unlisted) → median 0.5."""
+        judges = [
+            {'judge_id': 'j1', 'reviews': {'SUBMISSION-A': {'rule_deductions': [
+                {'rule_id': 'RACE-005', 'score': 0.4, 'explanation': 'x'}]}}},
+            {'judge_id': 'j2', 'reviews': {'SUBMISSION-A': {'rule_deductions': [
+                {'rule_id': 'RACE-005', 'score': 0.5, 'explanation': 'y'}]}}},
+            {'judge_id': 'j3', 'reviews': {'SUBMISSION-A': {'rule_deductions': []}}},
+        ]
+        merged, disagreements = self.median_rule_scores(judges, 'SUBMISSION-A')
+        assert len(merged) == 1
+        assert merged[0]['score'] == 0.5
+        # unlisted judge counts as 1.0 → spread 0.6 > 0.3 → flagged
+        assert len(disagreements) == 1
+
+    def test_ranking_agreement_bounds(self):
+        identical = [['A', 'B', 'C'], ['A', 'B', 'C']]
+        reversed_ = [['A', 'B', 'C'], ['C', 'B', 'A']]
+        assert self.ranking_agreement(identical) == 1.0
+        assert self.ranking_agreement(reversed_) == 0.0
+        assert self.ranking_agreement([['A', 'B', 'C']]) == 1.0  # single judge
+
 # ==================== CLI Tests ====================
 
 class TestCLI:
@@ -531,7 +574,7 @@ if __name__ == '__main__':
     test_classes = [
         TestRubric, TestStripComments, TestSecurityRules,
         TestFunctionalRules, TestMaintainabilityRules,
-        TestParseDiff, TestSmokeTest, TestScoring, TestCLI
+        TestParseDiff, TestSmokeTest, TestScoring, TestPanel, TestCLI
     ]
 
     passed = 0
