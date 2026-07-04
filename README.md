@@ -1,8 +1,18 @@
 # Judicative
 
-Automated judge for coding-task solutions. Give multiple agents the same issue, run this script, get a ranked verdict with per-category scores and specific findings.
+Automated judge for coding-task solutions. Give multiple agents the same issue, run this script, get a ranked verdict on a hard 0–100 scale with per-category findings, a "what you did wrong" report, and instructions for the next run.
 
 The rubric is data-driven, derived from **4,136 review comments** across **49 repos** in the nuri-com organization (a non-custodial Bitcoin/Lightning wallet). Not invented — extracted from real code review practice.
+
+## The three branches
+
+The name is deliberate — the kit separates powers:
+
+- **Legislative** — `scan_all.py` + the rubrics: mines your chosen repos (commits, PRs, review comments) and writes the law. Point it at different repos and you get a different constitution.
+- **Judicative** — `judge.py`: applies the law to any submission. Deterministic static layer + LLM layer, hard 0–100 score, written opinion (`--report-md`).
+- **Executive** — the agent under test + the improvement loop: takes the ruling, extracts generalized instructions, and executes the next run better. `AGENT_PROMPT.md` and `mcp_server.py` are its interface.
+
+Measured on myself: one loop through all three branches moved my score from **46.36 (FAIL) to 89.55 (PASS)** — see [RESULTS.md](RESULTS.md).
 
 ## Quick Start
 
@@ -24,10 +34,35 @@ python3 judge.py --issue issue.md --solutions agent_a/ agent_b/ agent_c/ --rubri
 You give 3 agents the same coding issue. Each produces code. Judicative:
 
 1. Runs **14 static regex rules** against each solution (string-aware comment stripping, no false positives on URLs)
-2. Optionally sends code to an **LLM** to evaluate 18 LLM-only rules (race conditions, stale state, architecture, etc.)
-3. Scores each solution across **24 categories** with data-driven weights
-4. Applies **hard gates** — a single critical security violation = automatic FAIL
-5. Ranks solutions and prints a verdict
+2. Optionally evaluates the LLM-only rules (race conditions, stale state, architecture, etc.) via an **LLM API** or an **external judge file** (`--assessments` — any model can judge without this process holding a key)
+3. Scores on **one hard 0–100 scale** — every finding costs real points (global penalty model, see below)
+4. Applies **hard gates** — a single critical security violation caps the score at 25 and forces FAIL
+5. Ranks solutions, prints a verdict, and writes a **mistakes report** (`--report-md`) with instructions for the next run
+
+## Scoring (global penalty model — "hard mode")
+
+The old model averaged 24 per-category scores that each started at a free 100; a solution with 5 critical security violations still scored 91.65. That is compression, not judgment. Now:
+
+```
+score = max(0, 100 − Σ penalties)          — one scale, no free points
+
+penalty per finding = point_penalty[severity] × emphasis[category]
+    critical 20 · major 6 · minor 2 · nitpick 0.25
+    emphasis = category_weight / mean_weight, clamped to [0.5, 2.0]
+      (data-driven: race_condition and security cost 2×)
+
+repeated hits of the same rule decay geometrically (×0.5 each)
+    → one spammy regex can cost at most 2× its single-hit penalty
+identical matches found by two rules count once (costliest kept)
+LLM rules deduct (1 − judge_score) × the same penalty
+
+hard gate: critical violation in a gated category
+    → total capped at 25 AND verdict = FAIL (score and verdict can't disagree)
+```
+
+All knobs live in the rubric's `scoring` block, so the model is reproducible from the JSON alone. Calibration on the synthetic fixtures (static-only): **good 100 · partial 86.79 · bad 0** — instead of the old 100 / 99.71 / 91.65.
+
+Static-only scores are an **upper bound**: a clean static run means "nothing a regex can catch". The discrimination between careful solutions lives in the LLM-rule layer.
 
 ## The Data Story
 
@@ -93,16 +128,18 @@ All signal. No human/AI distinction — the taxonomy is built from whatever revi
 Layer 1: Static Analysis (regex, fast, deterministic)
     │   14 rules with string-aware comment stripping
     │   No false positives on URLs, strings containing // or /*
+    │   Duplicate matches across rules deduped
     │
     ▼
 Layer 2: LLM Holistic Review (optional, one API call per solution)
-    │   18 rules that require semantic understanding
-    │   Sends ~6000 chars of concatenated code
+    │   Rules that require semantic understanding
     │   LLM scores each rule 0.0-1.0
+    │   OR: --assessments file from any external judge (no API key needed)
     │
     ▼
-Scoring: weighted sum of category scores
-    │   Hard gates: critical violation → category = 0 → automatic FAIL
+Scoring: global penalty model (see above)
+    │   Every finding costs points on one 0-100 scale
+    │   Hard gates: critical violation → capped at 25 → automatic FAIL
     │   Pass threshold: 70
 ```
 
@@ -194,28 +231,47 @@ python3 judge.py --task task.json --rubric rubric_v2.json -o results.json
 
 # Verbose (show all findings with file:line)
 python3 judge.py --task task.json --rubric rubric_v2.json -v
+
+# Mistakes report: "what you did wrong" + instructions for the next run
+python3 judge.py --task task.json --rubric rubric_v2.json --report-md report.md
+
+# External judge (any LLM scores the llm-rules, no API key in this process):
+# assessments.json = {"agent_a": [{"rule_id": "RACE-005", "score": 0.4, "explanation": "..."}]}
+python3 judge.py --task task.json --rubric rubric_v2.json --static-only --assessments assessments.json
 ```
+
+### MCP server — point any LLM at the test
+
+```bash
+claude mcp add judicative -- python3 /path/to/judicative/mcp_server.py
+```
+
+Exposes `list_tasks`, `get_task`, `submit_solution` (returns the hard score + mistakes report), and `get_rubric`. Stdlib only. Tasks live in `tasks/<task-id>/issue.md` — add a directory to add a task. `AGENT_PROMPT.md` has copy-paste prompts for running any agent as examinee or as second-opinion judge.
 
 ### Output
 
 ```
 ======================================================================
   JUDGMENT RESULTS
+  (static-only: LLM rules not evaluated — scores are an UPPER BOUND)
 ======================================================================
 
   🥇 agent_good
-     Score: 100.0/100  Verdict: PASS
-     race_condition                  100.0  (weight=0.18)
-     stale_state                     100.0  (weight=0.15)
-     security_crypto                 100.0  (weight=0.10)
-     ...
+     Score: 100.0/100  Verdict: PASS  Penalty: -0.0
+
+  🥈 agent_partial
+     Score: 86.79/100  Verdict: PASS  Penalty: -13.21
+     error_handling                   58.0  (-13.21 pts, emphasis=1.26x)
+       [major   ] ERR-001 lib/secureKeyStorage.ts:20 — catch (error) { }
+       ...
 
   🥉 agent_bad
-     Score: 91.65/100  Verdict: FAIL
-     security_crypto                   0.0  (weight=0.10) [HARD GATE TRIGGERED]
-       [critical] SEC-001 localStorage.setItem('nuri_seed', ...)
-       [critical] SEC-003 Math.random()
-       [critical] SEC-004 eval()
+     Score: 0.0/100  Verdict: FAIL  Penalty: -205.21
+     security_crypto                   0.0  (-192.00 pts, emphasis=2.0x) [HARD GATE TRIGGERED]
+       [critical] SEC-001 lib/secureKeyStorage.ts:14 — localStorage.setItem('nuri_seed', ...
+       [critical] SEC-003 lib/secureKeyStorage.ts:8 — Math.random(
+       [critical] SEC-004 lib/secureKeyStorage.ts:40 — eval(
+       ...
 
 ======================================================================
   BEST: agent_good (100.0/100)
@@ -226,10 +282,10 @@ python3 judge.py --task task.json --rubric rubric_v2.json -v
 
 ```bash
 python3 test_judge.py
-# 40 tests, all passing
+# 50 tests, all passing
 ```
 
-Covers: rubric validation, string-aware comment stripping (URLs, block comments in strings, Python hashes), all static rules, diff parsing, end-to-end smoke test, CLI.
+Covers: rubric validation, string-aware comment stripping (URLs, block comments in strings, Python hashes), all static rules, diff parsing, the scoring model (hard-gate cap, repeat decay, dedup determinism, emphasis clamping, score/verdict coherence, v1+v2 calibration), end-to-end smoke test, CLI.
 
 ## How the Rubric Was Built
 
@@ -253,18 +309,20 @@ Covers: rubric validation, string-aware comment stripping (URLs, block comments 
 
 ```
 judicative/
-├── judge.py              # Main judging engine (3-layer: static + LLM + holistic)
-├── rubric_v2.json        # 24 categories, data-driven weights, 28 rules
+├── judge.py              # Judicative: judging engine, global penalty scoring, mistakes report
+├── mcp_server.py         # MCP server — any LLM can take the test (stdlib only)
+├── rubric_v2.json        # The law: 26 categories, data-driven weights, 28 rules
 ├── rubric.json           # v1 rubric (6 categories, for reference)
-├── test_judge.py         # 40 tests (all passing)
-├── test_fixtures/        # Synthetic solutions for smoke testing
-│   ├── task_smoke.json   # Task with 3 solutions (good/bad/partial)
-│   ├── issue.md
-│   ├── solution_good/
-│   ├── solution_bad/
-│   └── solution_partial/
-├── scan_all.py           # Data collection script (scans a GitHub org)
+├── scan_all.py           # Legislative: mines a GitHub org into rubric data
 ├── validate_real_prs.py  # Validates judge against real PR diffs
+├── test_judge.py         # 50 tests (all passing)
+├── tasks/                # Test tasks served by the MCP server
+│   └── task-001-secure-key-storage/issue.md
+├── runs/                 # Executive: recorded test runs per agent
+│   └── claude-fable-5/   # run1 (cold), run2 (instructed), assessments, report
+├── test_fixtures/        # Synthetic solutions for smoke testing
+├── RESULTS.md            # Self-test results: 46.36 → 89.55 in one loop
+├── AGENT_PROMPT.md       # Copy-paste prompts: examinee + second-opinion judge
 └── README.md
 ```
 
@@ -281,11 +339,12 @@ Edit `rubric_v2.json`. Each rule needs:
 
 ## Next Steps
 
-1. **Test the LLM layer** with Ollama — should activate 18 more rules and jump recall from 5.7% toward 20-40%
-2. **Wire `--diffs` flag** for PR-based judging
-3. **Split rubric** into `rubric-base.json` + `rubric-crypto.json` for non-wallet tasks
-4. **Improve recall** — the race_category static rule (90% precision, 20% recall) shows regex can work; add more patterns for stale_state and error_handling
-5. **Mine the 1,568 unclassified comments** for missed patterns
+1. **Second opinions** — have other LLMs judge the committed runs (`AGENT_PROMPT.md`, Role 2) and measure judge disagreement per rule
+2. **More tasks** — 5–10 tasks covering the top rubric categories, so scores are a benchmark rather than an anecdote
+3. **Test the LLM layer live** with an API key — activates the remaining rules and should lift recall from 5.7% toward 20-40%
+4. **Multi-org legislative** — run `scan_all.py` against additional respected orgs/accounts and merge rubrics
+5. **Wire `--diffs` flag** for PR-based judging
+6. **Mine the 1,568 unclassified comments** for missed patterns
 
 ## Related Work
 

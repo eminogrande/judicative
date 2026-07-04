@@ -1,7 +1,7 @@
 {
   "$schema": "judicative-rubric-v2",
   "description": "Data-driven rubric v2, derived from 3,972 comments across 49 nuri-com repos (411 PRs, 646 issues, 1,707 inline comments, 752 general comments, 1,384 PR reviews, 293 issue comments). Weights are proportional to comment frequency with a minimum floor for catastrophic-but-rare categories (security). The top 2 categories (race_condition 12.5%, stale_state 9.4%) were ABSENT from rubric v1.",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "source_data": {
     "total_comments": 3972,
     "classified": 2404,
@@ -752,16 +752,19 @@
       ]
     }
   },
-  "severity_weights": {
-    "critical": 3.0,
-    "major": 2.0,
-    "minor": 1.0,
-    "nitpick": 0.25
-  },
   "scoring": {
     "max_score": 100,
     "pass_threshold": 70,
-    "hard_gate_fail_score": 0,
-    "description": "Each category scored 0-100. Final = weighted sum. Hard gate categories with critical violations get score 0. Below pass_threshold = reject."
+    "hard_gate_cap": 25,
+    "point_penalties": {
+      "critical": 20.0,
+      "major": 6.0,
+      "minor": 2.0,
+      "nitpick": 0.25
+    },
+    "repeat_decay": 0.5,
+    "emphasis_clamp": [0.5, 2.0],
+    "category_severity_scale": 4.0,
+    "description": "Global penalty model: every finding deducts point_penalties[severity] × category emphasis (weight / mean weight, clamped to emphasis_clamp) from a single 0-100 scale. Repeated hits of the same rule decay geometrically (repeat_decay^n, so max 2x the single-hit penalty). LLM rules deduct (1 - llm_score) × penalty. A critical violation in a hard_gate category caps the total at hard_gate_cap and forces FAIL. Below pass_threshold = FAIL. Per-category scores are diagnostic: 100 - raw_penalty × category_severity_scale."
   }
 }

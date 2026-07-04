@@ -63,6 +63,9 @@ class CategoryResult:
     findings: List[Finding] = field(default_factory=list)
     llm_scores: List[dict] = field(default_factory=list)
     hard_gate_triggered: bool = False
+    raw_penalty: float = 0.0
+    emphasis: float = 1.0
+    global_penalty: float = 0.0
 
 @dataclass
 class SolutionResult:
@@ -73,6 +76,8 @@ class SolutionResult:
     all_findings: List[Finding] = field(default_factory=list)
     files_analyzed: int = 0
     lines_analyzed: int = 0
+    total_penalty: float = 0.0
+    hard_gate_capped: bool = False
 
 # ==================== Rubric Loader ====================
 
@@ -671,41 +676,110 @@ def evaluate_llm_rules(llm: LLMBackend, rubric: dict, issue: str,
     return assessments
 
 # ==================== Scoring ====================
+#
+# Global penalty model ("hard mode"):
+#   - Every finding deducts points from ONE 0-100 scale (not from a per-category
+#     score that then gets diluted by a small category weight).
+#   - Deduction = point_penalties[severity] × category emphasis.
+#   - Emphasis = category_weight / mean_weight, clamped — findings in categories
+#     the review data cares about most (race conditions, security) cost up to 2×.
+#   - Repeated hits of the same rule decay geometrically (repeat_decay^n), so a
+#     regex firing 50 times costs at most 1/(1-decay) × the single-hit penalty.
+#   - LLM-scored rules deduct (1 - llm_score) × the same penalty.
+#   - A triggered hard gate caps the total at hard_gate_cap and forces FAIL, so
+#     the number and the verdict can never disagree.
 
-def compute_category_score(findings: List[Finding], llm_assessments: List[dict],
-                           severity_weights: dict) -> Tuple[float, dict]:
-    """Compute a category score (0-100). Returns (score, details)."""
-    penalty = 0.0
+DEFAULT_SCORING = {
+    'max_score': 100,
+    'pass_threshold': 70,
+    'hard_gate_cap': 25.0,
+    'point_penalties': {'critical': 20.0, 'major': 6.0, 'minor': 2.0, 'nitpick': 0.25},
+    'repeat_decay': 0.5,
+    'emphasis_clamp': [0.5, 2.0],
+    'category_severity_scale': 4.0,
+}
 
+def get_scoring(rubric: dict) -> dict:
+    """Merge the rubric's scoring config over the defaults."""
+    scoring = dict(DEFAULT_SCORING)
+    scoring.update(rubric.get('scoring', {}))
+    # Nested dict: merge rather than replace so partial overrides work
+    pp = dict(DEFAULT_SCORING['point_penalties'])
+    pp.update(rubric.get('scoring', {}).get('point_penalties', {}))
+    scoring['point_penalties'] = pp
+    return scoring
+
+def compute_emphasis(rubric: dict, scoring: dict) -> Dict[str, float]:
+    """Per-category penalty multiplier: weight relative to the mean weight,
+    clamped so no category is fully ignored or infinitely amplified."""
+    weights = {name: cat['weight'] for name, cat in rubric['categories'].items()}
+    mean_w = sum(weights.values()) / len(weights) if weights else 1.0
+    lo, hi = scoring['emphasis_clamp']
+    return {
+        name: min(hi, max(lo, w / mean_w)) if mean_w > 0 else 1.0
+        for name, w in weights.items()
+    }
+
+def dedupe_findings(findings: List[Finding], point_penalties: dict) -> List[Finding]:
+    """Collapse findings where two rules matched the same code (same file, line,
+    and matched text) into one, keeping the costliest. Prevents double-penalizing
+    rules that share a regex (e.g., RACE-002 and CATCH-002 both match `void f(`).
+    Tie-break on rule_id for reproducibility."""
+    kept: Dict[tuple, Finding] = {}
     for f in findings:
-        w = severity_weights.get(f.severity, 1.0)
-        penalty += w
+        key = (f.file, f.line, f.match)
+        prev = kept.get(key)
+        if prev is None:
+            kept[key] = f
+            continue
+        f_cost = point_penalties.get(f.severity, 1.0)
+        p_cost = point_penalties.get(prev.severity, 1.0)
+        if (f_cost, prev.rule_id) > (p_cost, f.rule_id):
+            kept[key] = f
+    return list(kept.values())
+
+def compute_category_penalty(findings: List[Finding], llm_assessments: List[dict],
+                             scoring: dict) -> Tuple[float, dict]:
+    """Raw penalty points for one category (before emphasis).
+    Static findings: full penalty for the first hit of a rule, decaying
+    geometrically for repeats. LLM rules: (1 - score) × penalty."""
+    pp = scoring['point_penalties']
+    decay = scoring['repeat_decay']
+
+    penalty = 0.0
+    by_rule: Dict[str, List[Finding]] = {}
+    for f in findings:
+        by_rule.setdefault(f.rule_id, []).append(f)
+    for rule_id, hits in by_rule.items():
+        base = pp.get(hits[0].severity, 1.0)
+        for i in range(len(hits)):
+            penalty += base * (decay ** i)
 
     for a in llm_assessments:
-        w = severity_weights.get(a['severity'], 1.0)
-        penalty += (1.0 - a['score']) * w
-
-    score = max(0.0, 100.0 - penalty)
+        base = pp.get(a['severity'], 1.0)
+        penalty += (1.0 - a['score']) * base
 
     details = {
-        'raw_penalty': round(penalty, 2),
         'static_findings_count': len(findings),
         'llm_assessments_count': len(llm_assessments),
-        'score_before_weight': round(score, 2),
     }
-    return score, details
+    return penalty, details
 
 def judge_solution(rubric: dict, issue: str, solution_files: Dict[str, str],
                    agent_id: str, llm: Optional[LLMBackend] = None,
-                   static_only: bool = False) -> SolutionResult:
-    """Judge a single solution against the rubric."""
+                   static_only: bool = False,
+                   external_assessments: Optional[List[dict]] = None) -> SolutionResult:
+    """Judge a single solution against the rubric.
+
+    external_assessments: pre-computed LLM-rule scores from an outside judge
+    (another LLM, a human reviewer) as [{rule_id, score, explanation}, ...].
+    Lets any model act as judge without this process holding an API key."""
     result = SolutionResult(agent_id=agent_id)
     result.files_analyzed = len(solution_files)
     result.lines_analyzed = sum(len(c.split('\n')) for c in solution_files.values())
 
-    severity_weights = rubric.get('severity_weights', {
-        'critical': 3.0, 'major': 2.0, 'minor': 1.0, 'nitpick': 0.25
-    })
+    scoring = get_scoring(rubric)
+    emphasis = compute_emphasis(rubric, scoring)
 
     all_static_findings = []
     all_llm_assessments = []
@@ -720,30 +794,60 @@ def judge_solution(rubric: dict, issue: str, solution_files: Dict[str, str],
         file_findings = run_static_checks(fpath, code, static_rules)
         all_static_findings.extend(file_findings)
 
+    all_static_findings = dedupe_findings(all_static_findings, scoring['point_penalties'])
+
     # Layer 3: LLM holistic review
     if not static_only and llm and llm.available:
         all_llm_assessments = evaluate_llm_rules(llm, rubric, issue, solution_files, all_static_findings)
 
-    # Score each category
+    # External judge (another LLM / human) supplied rule scores
+    if external_assessments:
+        rule_lookup = {}
+        for cat in rubric['categories'].values():
+            for rule in cat['rules']:
+                rule_lookup[rule['id']] = rule
+        already_scored = {a['rule_id'] for a in all_llm_assessments}
+        for ea in external_assessments:
+            rid = ea.get('rule_id', '')
+            if rid in rule_lookup and rid not in already_scored:
+                rule = rule_lookup[rid]
+                all_llm_assessments.append({
+                    'rule_id': rid,
+                    'rule_name': rule['name'],
+                    'severity': rule['severity'],
+                    'score': max(0.0, min(1.0, float(ea.get('score', 0.5)))),
+                    'explanation': ea.get('explanation', ''),
+                })
+
+    # Per-category penalties → global deduction
+    total_penalty = 0.0
     for cat_name, cat in rubric['categories'].items():
         cat_rule_ids = {r['id'] for r in cat['rules']}
 
         cat_findings = [f for f in all_static_findings if f.rule_id in cat_rule_ids]
         cat_assessments = [a for a in all_llm_assessments if a['rule_id'] in cat_rule_ids]
 
-        score, details = compute_category_score(cat_findings, cat_assessments, severity_weights)
+        raw_penalty, details = compute_category_penalty(cat_findings, cat_assessments, scoring)
+
+        # Category score is diagnostic only (the total is NOT an average of these):
+        # scaled so one critical ≈ wipes out most of a category.
+        cat_score = max(0.0, 100.0 - raw_penalty * scoring['category_severity_scale'])
 
         cat_result = CategoryResult(
             name=cat_name,
-            score=score,
+            score=cat_score,
             weight=cat['weight'],
             hard_gate=cat.get('hard_gate', False),
             findings=cat_findings,
             llm_scores=cat_assessments,
+            raw_penalty=round(raw_penalty, 2),
+            emphasis=round(emphasis[cat_name], 2),
+            global_penalty=round(raw_penalty * emphasis[cat_name], 2),
         )
         cat_result.__dict__.update(details)
 
-        # Hard gate: if any critical finding in a hard_gate category, score = 0
+        # Hard gate: any critical finding (or LLM critical scored < 0.3) in a
+        # hard_gate category zeroes the category and caps the total below.
         if cat.get('hard_gate', False):
             critical_findings = [f for f in cat_findings if f.severity == 'critical']
             critical_llm = [a for a in cat_assessments if a['severity'] == 'critical' and a['score'] < 0.3]
@@ -751,20 +855,23 @@ def judge_solution(rubric: dict, issue: str, solution_files: Dict[str, str],
                 cat_result.score = 0.0
                 cat_result.hard_gate_triggered = True
 
+        total_penalty += raw_penalty * emphasis[cat_name]
         result.category_results[cat_name] = cat_result
 
-    # Compute weighted total
-    total_weight = sum(cat['weight'] for cat in rubric['categories'].values())
-    weighted_sum = sum(
-        result.category_results[cat_name].score * cat['weight']
-        for cat_name, cat in rubric['categories'].items()
-    )
-    result.total_score = round(weighted_sum / total_weight, 2) if total_weight > 0 else 0.0
+    # Total: one scale, every finding costs real points
+    result.total_penalty = round(total_penalty, 2)
+    total = max(0.0, scoring['max_score'] - total_penalty)
+
+    # Hard gate: cap the score so number and verdict agree
+    any_hard_gate = any(cat.hard_gate_triggered for cat in result.category_results.values())
+    if any_hard_gate and total > scoring['hard_gate_cap']:
+        total = scoring['hard_gate_cap']
+        result.hard_gate_capped = True
+
+    result.total_score = round(total, 2)
 
     # Verdict
-    pass_threshold = rubric['scoring']['pass_threshold']
-    # Hard gate veto: any triggered hard gate = automatic FAIL, regardless of score
-    any_hard_gate = any(cat.hard_gate_triggered for cat in result.category_results.values())
+    pass_threshold = scoring['pass_threshold']
     if any_hard_gate:
         result.verdict = 'FAIL'
     else:
@@ -813,6 +920,8 @@ def result_to_dict(result: SolutionResult) -> dict:
     return {
         'agent_id': result.agent_id,
         'total_score': round(result.total_score, 2),
+        'total_penalty': round(result.total_penalty, 2),
+        'hard_gate_capped': result.hard_gate_capped,
         'verdict': result.verdict,
         'files_analyzed': result.files_analyzed,
         'lines_analyzed': result.lines_analyzed,
@@ -820,6 +929,9 @@ def result_to_dict(result: SolutionResult) -> dict:
             cat_name: {
                 'score': round(cat.score, 2),
                 'weight': cat.weight,
+                'emphasis': cat.emphasis,
+                'raw_penalty': cat.raw_penalty,
+                'global_penalty': cat.global_penalty,
                 'hard_gate': cat.hard_gate,
                 'hard_gate_triggered': cat.hard_gate_triggered,
                 'static_findings': len(cat.findings),
@@ -849,10 +961,12 @@ def result_to_dict(result: SolutionResult) -> dict:
         },
     }
 
-def print_summary(results: List[dict], verbose: bool = False):
+def print_summary(results: List[dict], verbose: bool = False, static_only: bool = False):
     """Print a human-readable summary of results."""
     print("\n" + "=" * 70)
     print("  JUDGMENT RESULTS")
+    if static_only:
+        print("  (static-only: LLM rules not evaluated — scores are an UPPER BOUND)")
     print("=" * 70)
 
     # Sort by score descending
@@ -860,16 +974,20 @@ def print_summary(results: List[dict], verbose: bool = False):
 
     for rank, r in enumerate(sorted_results, 1):
         medal = ['🥇', '🥈', '🥉', '4.', '5.', '6.', '7.', '8.'][min(rank - 1, 7)]
+        cap = "  [CAPPED BY HARD GATE]" if r.get('hard_gate_capped') else ""
         print(f"\n  {medal} {r['agent_id']}")
-        print(f"     Score: {r['total_score']}/100  Verdict: {r['verdict']}")
+        print(f"     Score: {r['total_score']}/100  Verdict: {r['verdict']}  Penalty: -{r['total_penalty']}{cap}")
         print(f"     Files: {r['files_analyzed']}  Lines: {r['lines_analyzed']}")
         for cat_name, cat in r['categories'].items():
+            has_signal = cat['global_penalty'] > 0 or cat['hard_gate_triggered']
+            if not (has_signal or verbose):
+                continue  # clean categories are noise; -v shows them all
             gate = " [HARD GATE TRIGGERED]" if cat['hard_gate_triggered'] else ""
-            print(f"     {cat_name:30s} {cat['score']:6.1f}  (weight={cat['weight']}){gate}")
-            if verbose:
-                for f in cat['findings']:
-                    print(f"       [{f['severity']:8s}] {f['rule_id']} {f['file']}:{f['line']} — {f['match'][:60]}")
-                for a in cat['llm_scores']:
+            print(f"     {cat_name:30s} {cat['score']:6.1f}  (-{cat['global_penalty']:.2f} pts, emphasis={cat['emphasis']}x){gate}")
+            for f in cat['findings']:
+                print(f"       [{f['severity']:8s}] {f['rule_id']} {f['file']}:{f['line']} — {f['match'][:60]}")
+            for a in cat['llm_scores']:
+                if a['score'] < 1.0 or verbose:
                     print(f"       [LLM {a['score']:.1f}] {a['rule_id']} — {a['explanation'][:80]}")
 
     print(f"\n{'=' * 70}")
@@ -877,6 +995,111 @@ def print_summary(results: List[dict], verbose: bool = False):
     if best:
         print(f"  BEST: {best['agent_id']} ({best['total_score']}/100)")
     print("=" * 70)
+
+# ==================== Mistakes Report (the court's written opinion) ====================
+
+def build_mistakes_report(report: dict, rubric: dict) -> str:
+    """Render a markdown report: per-agent 'what you did wrong', backed by the
+    rule descriptions and the real-review frequency data, plus a distilled
+    'instructions for your next run' block that can be pasted into an agent's
+    system prompt for an improvement run."""
+    lines = []
+    lines.append("# Judicative Report — What Went Wrong\n")
+    lines.append(f"Rubric: `{rubric.get('version', 'unknown')}` — mode: `{report.get('mode', '?')}`"
+                 f" — score model: `{report.get('score_model', '?')}`\n")
+    if report.get('mode') == 'static-only':
+        lines.append("> Static-only run: LLM rules were not evaluated, scores are an **upper bound**.\n")
+
+    # Rule + category lookups
+    rule_lookup, rule_category = {}, {}
+    for cat_name, cat in rubric['categories'].items():
+        for rule in cat['rules']:
+            rule_lookup[rule['id']] = rule
+            rule_category[rule['id']] = cat_name
+
+    # Leaderboard
+    results = sorted(report['results'], key=lambda r: r['total_score'], reverse=True)
+    lines.append("## Leaderboard\n")
+    lines.append("| Rank | Agent | Score | Verdict | Penalty |")
+    lines.append("|---|---|---|---|---|")
+    for i, r in enumerate(results, 1):
+        cap = " (capped by hard gate)" if r.get('hard_gate_capped') else ""
+        lines.append(f"| {i} | {r['agent_id']} | {r['total_score']}/100 | {r['verdict']}{cap} | -{r['total_penalty']} |")
+    lines.append("")
+
+    violation_counts: Dict[str, int] = {}
+
+    for r in results:
+        lines.append(f"## {r['agent_id']} — {r['total_score']}/100 ({r['verdict']})\n")
+
+        # Collect violations with their penalty contribution
+        violated = []  # (global_penalty_share, rule_id, detail_line)
+        for cat_name, cat in r['categories'].items():
+            freq = rubric['categories'][cat_name].get('source_count')
+            freq_note = f" Real reviews flagged this category {freq}× in the source repos." if freq else ""
+            for f in cat['findings']:
+                rule = rule_lookup.get(f['rule_id'], {})
+                violated.append((
+                    cat['emphasis'], f['rule_id'],
+                    f"- **[{f['severity']}] {f['rule_id']} — {f['rule_name']}** at `{f['file']}:{f['line']}`\n"
+                    f"  - Matched: `{' '.join(f['match'].split())[:80]}`\n"
+                    f"  - Why it matters: {rule.get('description', 'n/a')}{freq_note}"
+                ))
+                violation_counts[f['rule_id']] = violation_counts.get(f['rule_id'], 0) + 1
+            for a in cat['llm_scores']:
+                if a['score'] < 1.0:
+                    rule = rule_lookup.get(a['rule_id'], {})
+                    violated.append((
+                        cat['emphasis'] * (1.0 - a['score']), a['rule_id'],
+                        f"- **[judge score {a['score']:.1f}] {a['rule_id']} — {a['rule_name']}**\n"
+                        f"  - Judge: {a['explanation'][:300] or '(no explanation)'}\n"
+                        f"  - Why it matters: {rule.get('description', 'n/a')}{freq_note}"
+                    ))
+                    if a['score'] < 0.7:
+                        violation_counts[a['rule_id']] = violation_counts.get(a['rule_id'], 0) + 1
+
+        if not violated:
+            lines.append("No findings. (In static-only mode this means: nothing a regex can catch.)\n")
+            continue
+
+        lines.append("### What you did wrong\n")
+        for _, _, detail in sorted(violated, key=lambda v: -v[0]):
+            lines.append(detail)
+        lines.append("")
+
+        # Distilled, generalized instructions — deduped by rule
+        lines.append("### Instructions for your next run\n")
+        lines.append("Add these to the agent's system prompt / instructions and re-run the task:\n")
+        seen = set()
+        for _, rid, _ in sorted(violated, key=lambda v: -v[0]):
+            if rid in seen:
+                continue
+            seen.add(rid)
+            rule = rule_lookup.get(rid, {})
+            lines.append(f"- **{rule.get('name', rid)}**: {rule.get('description', '')}")
+        lines.append("")
+
+    # Cross-agent view: what did everyone get wrong
+    if violation_counts:
+        lines.append("## What did others do wrong (across all submissions)\n")
+        lines.append("| Rule | Category | Violations | Severity |")
+        lines.append("|---|---|---|---|")
+        for rid, count in sorted(violation_counts.items(), key=lambda kv: -kv[1]):
+            rule = rule_lookup.get(rid, {})
+            lines.append(f"| {rid} — {rule.get('name', '?')} | {rule_category.get(rid, '?')} | {count} | {rule.get('severity', '?')} |")
+        lines.append("")
+
+    # The legislative record: what the source repos' reviewers flag most
+    src_cats = [(name, cat) for name, cat in rubric['categories'].items() if cat.get('source_count')]
+    if src_cats:
+        lines.append("## Context: what real reviewers flag in the source repos\n")
+        lines.append("| Category | Review comments | Share |")
+        lines.append("|---|---|---|")
+        for name, cat in sorted(src_cats, key=lambda nc: -nc[1]['source_count'])[:10]:
+            lines.append(f"| {name} | {cat['source_count']} | {cat.get('source_frequency', '?')}% |")
+        lines.append("")
+
+    return "\n".join(lines) + "\n"
 
 # ==================== Main ====================
 
@@ -904,6 +1127,8 @@ def main():
     parser.add_argument('--solutions', nargs='+', help='Paths to solution directories/files')
     parser.add_argument('--rubric', default='rubric.json', help='Path to rubric JSON')
     parser.add_argument('--output', '-o', help='Write JSON report to this file')
+    parser.add_argument('--report-md', help='Write a markdown mistakes report ("what you did wrong" + instructions for the next run) to this file')
+    parser.add_argument('--assessments', help='JSON file with external judge scores for LLM rules: {"agent_id": [{"rule_id": ..., "score": 0.0-1.0, "explanation": ...}]}. Lets any LLM act as judge without an API key.')
     parser.add_argument('--static-only', action='store_true', help='Skip LLM analysis (regex only)')
     parser.add_argument('--verbose', '-v', action='store_true', help='Verbose output')
     args = parser.parse_args()
@@ -931,6 +1156,12 @@ def main():
         print("LLM: not configured (set JUDGE_LLM_PROVIDER + API key). Running static-only.", file=sys.stderr)
         args.static_only = True
 
+    # External judge assessments (per agent_id)
+    external = {}
+    if args.assessments:
+        with open(args.assessments) as f:
+            external = json.load(f)
+
     # Judge each solution
     all_results = []
     for sol in solutions:
@@ -950,16 +1181,25 @@ def main():
             agent_id=agent_id,
             llm=llm if not args.static_only else None,
             static_only=args.static_only,
+            external_assessments=external.get(agent_id),
         )
 
         all_results.append(result_to_dict(result))
 
     # Print summary
-    print_summary(all_results, verbose=args.verbose)
+    print_summary(all_results, verbose=args.verbose, static_only=args.static_only and not external)
 
     # Write output
+    if external:
+        mode = 'static+external-judge'
+    elif args.static_only:
+        mode = 'static-only'
+    else:
+        mode = 'static+llm'
     report = {
         'rubric_version': rubric.get('version', 'unknown'),
+        'score_model': 'global-penalty-v2',
+        'mode': mode,
         'issue': issue_text[:500],
         'results': all_results,
     }
@@ -970,6 +1210,11 @@ def main():
         print(f"\nReport written to {args.output}", file=sys.stderr)
     else:
         print(json.dumps(report, indent=2))
+
+    if args.report_md:
+        with open(args.report_md, 'w') as f:
+            f.write(build_mistakes_report(report, rubric))
+        print(f"Mistakes report written to {args.report_md}", file=sys.stderr)
 
     # Exit code: 0 if best solution passes, 1 if all fail
     any_pass = any(r['verdict'] == 'PASS' for r in all_results)
