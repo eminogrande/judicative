@@ -18,7 +18,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from judge import (
     load_rubric, strip_comments, run_static_checks, parse_diff,
     load_solution_files, judge_solution, LLMBackend, build_task_from_args,
-    result_to_dict, Finding, CategoryResult, SolutionResult
+    result_to_dict, Finding, CategoryResult, SolutionResult,
+    get_scoring, compute_emphasis, dedupe_findings, compute_category_penalty,
+    DEFAULT_SCORING
 )
 
 RUBRIC_PATH = os.path.join(os.path.dirname(__file__), 'rubric.json')
@@ -47,7 +49,19 @@ class TestRubric:
         rubric = load_rubric(RUBRIC_PATH)
         assert 'categories' in rubric
         assert 'scoring' in rubric
-        assert 'severity_weights' in rubric
+
+    def test_scoring_config_is_hard(self):
+        """The scoring block must define the global penalty model, and the
+        hard-gate cap must sit below the pass threshold so a gated solution
+        can never PASS on points."""
+        rubric = load_rubric(RUBRIC_PATH)
+        scoring = get_scoring(rubric)
+        assert scoring['hard_gate_cap'] < scoring['pass_threshold']
+        pp = scoring['point_penalties']
+        assert pp['critical'] > pp['major'] > pp['minor'] > pp['nitpick']
+        # One critical must cost enough to matter on a 0-100 scale
+        assert pp['critical'] >= 15
+        assert 0.0 < scoring['repeat_decay'] < 1.0
 
     def test_rubric_has_all_categories(self):
         rubric = load_rubric(RUBRIC_PATH)
@@ -324,7 +338,9 @@ class TestSmokeTest:
         assert sol['agent_id'] == 'agent_bad'
         result = judge_solution(self.rubric, self.task['issue']['body'], sol['files'], 'agent_bad', static_only=True)
         assert result.verdict == 'FAIL'
-        assert result.total_score < 70.0
+        # Hard mode: 5 criticals must devastate the score, not shave 8 points
+        scoring = get_scoring(self.rubric)
+        assert result.total_score <= scoring['hard_gate_cap']
         # Hard gate must be triggered
         assert result.category_results['security_and_privacy'].hard_gate_triggered == True
         assert result.category_results['security_and_privacy'].score == 0.0
@@ -334,14 +350,14 @@ class TestSmokeTest:
         assert sol['agent_id'] == 'agent_partial'
         result = judge_solution(self.rubric, self.task['issue']['body'], sol['files'], 'agent_partial', static_only=True)
         assert result.verdict == 'PASS'
-        assert result.total_score < 100.0  # Has findings
-        assert result.total_score > 90.0   # But still good
+        # 3 major silent-catch findings should cost real points now
+        assert 75.0 < result.total_score < 95.0
         # Should have FUNC-002 findings (silent catch)
         func_findings = [f for f in result.all_findings if f.rule_id == 'FUNC-002']
         assert len(func_findings) == 3
 
     def test_ranking_order(self):
-        """Good > Partial > Bad"""
+        """Good > Partial > Bad, with real gaps — no more 91.7 vs 99.7 compression."""
         results = []
         for sol in self.task['solutions']:
             r = judge_solution(self.rubric, self.task['issue']['body'], sol['files'],
@@ -349,6 +365,24 @@ class TestSmokeTest:
             results.append(r)
         scores = {r.agent_id: r.total_score for r in results}
         assert scores['agent_good'] > scores['agent_partial'] > scores['agent_bad']
+        assert scores['agent_good'] - scores['agent_partial'] >= 10.0
+        assert scores['agent_partial'] - scores['agent_bad'] >= 30.0
+
+    def test_v2_rubric_calibration(self):
+        """Same calibration must hold on the data-driven v2 rubric."""
+        rubric_v2 = load_rubric(os.path.join(os.path.dirname(__file__), 'rubric_v2.json'))
+        scoring = get_scoring(rubric_v2)
+        scores = {}
+        verdicts = {}
+        for sol in self.task['solutions']:
+            r = judge_solution(rubric_v2, self.task['issue']['body'], sol['files'],
+                               sol['agent_id'], static_only=True)
+            scores[r.agent_id] = r.total_score
+            verdicts[r.agent_id] = r.verdict
+        assert scores['agent_good'] == 100.0
+        assert 75.0 < scores['agent_partial'] < 95.0
+        assert scores['agent_bad'] <= scoring['hard_gate_cap']
+        assert verdicts['agent_bad'] == 'FAIL'
 
     def test_hard_gate_zeros_security(self):
         """A single critical security finding should zero the security category."""
@@ -360,6 +394,136 @@ class TestSmokeTest:
         # Verify critical findings exist
         criticals = [f for f in sec.findings if f.severity == 'critical']
         assert len(criticals) >= 4  # localStorage, hardcoded secret, Math.random, eval
+
+# ==================== Scoring Model Tests ====================
+
+class TestScoring:
+    """Unit tests for the global penalty model ('hard mode')."""
+
+    def setup_method(self):
+        self.rubric = load_rubric(RUBRIC_PATH)
+        self.scoring = get_scoring(self.rubric)
+
+    def test_single_gated_critical_capped(self):
+        """One seed-in-localStorage and nothing else = capped at hard_gate_cap, FAIL."""
+        files = {'store.ts': "localStorage.setItem('seed', value);\n"}
+        result = judge_solution(self.rubric, 'store a value', files, 'one_critical', static_only=True)
+        assert result.verdict == 'FAIL'
+        assert result.total_score == self.scoring['hard_gate_cap']
+        assert result.hard_gate_capped == True
+
+    def test_repeat_decay(self):
+        """N hits of the same rule must cost less than N × the single-hit penalty
+        (geometric decay), so one spammy regex can't zero a solution alone."""
+        single = judge_solution(self.rubric, 'task',
+                                {'a.ts': 'try { x(); } catch (e) {}\n'},
+                                'single', static_only=True)
+        triple = judge_solution(self.rubric, 'task',
+                                {'a.ts': 'try { x(); } catch (e) {}\n' * 3},
+                                'triple', static_only=True)
+        single_cost = 100.0 - single.total_score
+        triple_cost = 100.0 - triple.total_score
+        assert triple_cost > single_cost            # more hits cost more
+        assert triple_cost < 3 * single_cost        # but sub-linearly
+        assert triple_cost <= 2 * single_cost + 0.01  # geometric sum bound: 1/(1-0.5) = 2x
+
+    def test_dedupe_same_match_across_rules(self):
+        """Two rules matching the same file:line:text count once (costliest kept)."""
+        f1 = Finding(rule_id='R-A', rule_name='a', severity='major', description='',
+                     file='x.ts', line=3, match='void foo(')
+        f2 = Finding(rule_id='R-B', rule_name='b', severity='critical', description='',
+                     file='x.ts', line=3, match='void foo(')
+        f3 = Finding(rule_id='R-A', rule_name='a', severity='major', description='',
+                     file='x.ts', line=9, match='void bar(')
+        kept = dedupe_findings([f1, f2, f3], self.scoring['point_penalties'])
+        assert len(kept) == 2
+        line3 = [f for f in kept if f.line == 3]
+        assert line3[0].rule_id == 'R-B'  # critical wins over major
+
+    def test_dedupe_is_deterministic_on_ties(self):
+        """Equal severity → lower rule_id wins, regardless of input order."""
+        f1 = Finding(rule_id='RACE-002', rule_name='a', severity='major', description='',
+                     file='x.ts', line=3, match='void foo(')
+        f2 = Finding(rule_id='CATCH-002', rule_name='b', severity='major', description='',
+                     file='x.ts', line=3, match='void foo(')
+        kept_ab = dedupe_findings([f1, f2], self.scoring['point_penalties'])
+        kept_ba = dedupe_findings([f2, f1], self.scoring['point_penalties'])
+        assert kept_ab[0].rule_id == kept_ba[0].rule_id == 'CATCH-002'
+
+    def test_llm_shortfall_penalty(self):
+        """LLM rules deduct (1 - score) × severity penalty."""
+        assessments = [{'rule_id': 'X-1', 'rule_name': 'x', 'severity': 'major',
+                        'score': 0.5, 'explanation': ''}]
+        penalty, _ = compute_category_penalty([], assessments, self.scoring)
+        assert abs(penalty - 0.5 * self.scoring['point_penalties']['major']) < 1e-9
+
+    def test_emphasis_clamped(self):
+        """Category emphasis stays within the configured clamp."""
+        emphasis = compute_emphasis(self.rubric, self.scoring)
+        lo, hi = self.scoring['emphasis_clamp']
+        for name, e in emphasis.items():
+            assert lo <= e <= hi, f"{name} emphasis {e} outside [{lo}, {hi}]"
+        # v1: security (0.40) is 2.4x the mean weight → clamped to 2.0
+        assert emphasis['security_and_privacy'] == hi
+        # low-weight categories clamp to the floor, not zero
+        assert emphasis['performance'] == lo
+
+    def test_score_and_verdict_never_disagree(self):
+        """A FAIL verdict from a hard gate implies a score below pass_threshold."""
+        files = {'bad.ts': "localStorage.setItem('nuri_seed', seed);\nconst n = Math.random();\n"}
+        result = judge_solution(self.rubric, 'task', files, 'gated', static_only=True)
+        assert result.verdict == 'FAIL'
+        assert result.total_score < self.scoring['pass_threshold']
+
+    def test_clean_solution_still_scores_100_static(self):
+        """No static findings = 100 in static-only mode (documented upper bound)."""
+        files = {'clean.ts': "export const add = (a: number, b: number): number => a + b;\n"}
+        result = judge_solution(self.rubric, 'task', files, 'clean', static_only=True)
+        assert result.total_score == 100.0
+        assert result.verdict == 'PASS'
+
+# ==================== Panel Tests ====================
+
+class TestPanel:
+    """Blind panel: deterministic blinding, median aggregation, ranking agreement."""
+
+    def setup_method(self):
+        from panel import blind_submissions, median_rule_scores, ranking_agreement
+        self.blind_submissions = blind_submissions
+        self.median_rule_scores = median_rule_scores
+        self.ranking_agreement = ranking_agreement
+
+    def test_blinding_is_deterministic_and_order_independent(self):
+        a = ('agent_a', {'f.ts': 'const a = 1;'})
+        b = ('agent_b', {'f.ts': 'const b = 2;'})
+        subs1, map1 = self.blind_submissions([a, b])
+        subs2, map2 = self.blind_submissions([b, a])
+        assert map1 == map2            # same labels regardless of input order
+        assert subs1 == subs2
+        assert set(map1.values()) == {'agent_a', 'agent_b'}
+        assert set(map1.keys()) == {'SUBMISSION-A', 'SUBMISSION-B'}
+
+    def test_median_is_robust_to_outlier_judge(self):
+        """Two strict judges at 0.4/0.5, one outlier at 1.0 (unlisted) → median 0.5."""
+        judges = [
+            {'judge_id': 'j1', 'reviews': {'SUBMISSION-A': {'rule_deductions': [
+                {'rule_id': 'RACE-005', 'score': 0.4, 'explanation': 'x'}]}}},
+            {'judge_id': 'j2', 'reviews': {'SUBMISSION-A': {'rule_deductions': [
+                {'rule_id': 'RACE-005', 'score': 0.5, 'explanation': 'y'}]}}},
+            {'judge_id': 'j3', 'reviews': {'SUBMISSION-A': {'rule_deductions': []}}},
+        ]
+        merged, disagreements = self.median_rule_scores(judges, 'SUBMISSION-A')
+        assert len(merged) == 1
+        assert merged[0]['score'] == 0.5
+        # unlisted judge counts as 1.0 → spread 0.6 > 0.3 → flagged
+        assert len(disagreements) == 1
+
+    def test_ranking_agreement_bounds(self):
+        identical = [['A', 'B', 'C'], ['A', 'B', 'C']]
+        reversed_ = [['A', 'B', 'C'], ['C', 'B', 'A']]
+        assert self.ranking_agreement(identical) == 1.0
+        assert self.ranking_agreement(reversed_) == 0.0
+        assert self.ranking_agreement([['A', 'B', 'C']]) == 1.0  # single judge
 
 # ==================== CLI Tests ====================
 
@@ -410,7 +574,7 @@ if __name__ == '__main__':
     test_classes = [
         TestRubric, TestStripComments, TestSecurityRules,
         TestFunctionalRules, TestMaintainabilityRules,
-        TestParseDiff, TestSmokeTest, TestCLI
+        TestParseDiff, TestSmokeTest, TestScoring, TestPanel, TestCLI
     ]
 
     passed = 0

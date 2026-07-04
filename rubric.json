@@ -1,7 +1,7 @@
 {
   "$schema": "judicative-rubric-v1",
   "description": "Judging rubric for coding-task solutions, derived from 101 structured review findings across the nuri-com organization (non-custodial Bitcoin/Lightning wallet). Weights reflect that a single crypto/security mistake can be catastrophic.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "categories": {
     "security_and_privacy": {
       "weight": 0.40,
@@ -316,16 +316,19 @@
       ]
     }
   },
-  "severity_weights": {
-    "critical": 3.0,
-    "major": 2.0,
-    "minor": 1.0,
-    "nitpick": 0.25
-  },
   "scoring": {
     "max_score": 100,
     "pass_threshold": 70,
-    "hard_gate_fail_score": 0,
-    "description": "Each category is scored 0-100. Final score = weighted sum of category scores. Any hard_gate category with a critical violation gets score 0 for that category. Below pass_threshold = reject."
+    "hard_gate_cap": 25,
+    "point_penalties": {
+      "critical": 20.0,
+      "major": 6.0,
+      "minor": 2.0,
+      "nitpick": 0.25
+    },
+    "repeat_decay": 0.5,
+    "emphasis_clamp": [0.5, 2.0],
+    "category_severity_scale": 4.0,
+    "description": "Global penalty model: every finding deducts point_penalties[severity] × category emphasis (weight / mean weight, clamped to emphasis_clamp) from a single 0-100 scale. Repeated hits of the same rule decay geometrically (repeat_decay^n, so max 2x the single-hit penalty). LLM rules deduct (1 - llm_score) × penalty. A critical violation in a hard_gate category caps the total at hard_gate_cap and forces FAIL. Below pass_threshold = FAIL. Per-category scores are diagnostic: 100 - raw_penalty × category_severity_scale."
   }
 }

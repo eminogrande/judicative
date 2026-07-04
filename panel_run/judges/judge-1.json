@@ -1,0 +1,132 @@
+{
+  "judge_id": "judge-1-security",
+  "reviews": {
+    "SUBMISSION-A": {
+      "holistic_score": 90,
+      "verdict": "PASS",
+      "strengths": [
+        "Web seed is encrypted at rest with a NON-EXTRACTABLE AES-GCM CryptoKey (lines 273-299); only ciphertext hits IndexedDB, and the residual XSS risk is honestly documented in the header",
+        "Fresh random 12-byte IV per encryption (lines 295-297) — no nonce reuse",
+        "Explicit zeroize() helper; seed is zeroized on the store-failure path (line 370) and buffer ownership/zeroize obligations are documented for callers (lines 353-354, 384)",
+        "All mutating ops serialized through a promise-chain mutex plus in-flight create deduplication (lines 207-219, 356-379) — concurrent create/wipe cannot interleave and duplicate creates resolve to one seed",
+        "wipeAllKeychainData iterates an ALL_ALIASES registry covering the seed AND the web wrapping key, attempts every alias, aggregates failures, and throws — wipe failure is fatal, never silent (lines 405-425)",
+        "OTA-safe: assertNativeAvailable gates every SecureStore call via isAvailableAsync with a clear user-facing error (lines 317-325)",
+        "Native storage uses WHEN_UNLOCKED_THIS_DEVICE_ONLY + requireAuthentication (lines 331-334); seed shape validated on load (lines 181-188) and malformed IDB entries rejected (lines 303-305)",
+        "Every catch logs and rethrows a typed KeyStorageError with cause; no silent fallback to weaker storage (lines 369-375, 390-395)"
+      ],
+      "weaknesses": [
+        "Native path necessarily produces an immutable base64 JS string of the seed that cannot be zeroized (lines 329-334) — documented, platform-forced, but still a real memory-exposure window",
+        "loadSeed() takes the global mutex (line 387), so a slow biometric prompt on native serializes behind unrelated reads; a read/write lock would be finer-grained",
+        "webLoadSeed returns Promise.reject(...) inside an async function (line 304) — works, but throw would be clearer",
+        "wipe on native calls assertNativeAvailable once per alias inside the loop (line 413) — redundant awaits"
+      ],
+      "rule_deductions": [
+        {"rule_id": "SEC-010", "score": 0.9, "explanation": "Lines 329-334: the base64 string copy of the seed passed to SecureStore.setItemAsync can never be zeroized (JS strings are immutable). The module documents this residual and zeroizes every buffer it can, so only a token deduction."}
+      ]
+    },
+    "SUBMISSION-B": {
+      "holistic_score": 66,
+      "verdict": "FAIL",
+      "strengths": [
+        "crypto.getRandomValues for seed generation (line 461); never touches localStorage",
+        "Native path uses WHEN_UNLOCKED_THIS_DEVICE_ONLY + requireAuthentication (lines 553-556)",
+        "Errors are logged AND rethrown as typed KeyStorageError with cause; explicit 'no silent fallback to weaker storage' contract (lines 558-561, 572-575)",
+        "wipeAllKeychainData iterates an ALL_ALIASES registry, attempts every alias, collects failures, and throws an aggregate error (lines 583-600)"
+      ],
+      "weaknesses": [
+        "The signing seed is stored as PLAINTEXT base64 in IndexedDB on web (lines 547-551): any same-origin XSS or devtools access reads the Bitcoin seed directly. For a wallet this needs at-rest encryption (e.g., a non-extractable AES-GCM wrapping key) before merge",
+        "Header comment (lines 435-436) claims 'IndexedDB-backed non-extractable storage on web' — factually false; the stored value is trivially extractable. Misleading security documentation is worse than none",
+        "No zeroization anywhere: generated seed buffers and decoded seeds are never wiped, and no zeroize helper is offered to callers",
+        "No concurrency control: two concurrent createAndStoreSeed() calls race; the loser's caller holds a seed that was silently overwritten in storage — funds-loss class bug in a wallet",
+        "SecureStore called with no availability check (lines 553, 570, 590) — crashes or opaque errors on binaries/OTA states lacking the native module",
+        "A fresh IDB connection is opened and closed for every operation (lines 484-535)"
+      ],
+      "rule_deductions": [
+        {"rule_id": "SEC-010", "score": 0.2, "explanation": "No zeroization at all: seeds created at line 547 and decoded at line 571 live in memory indefinitely; no wipe on the store-failure path (lines 558-561) and no zeroize API for callers."},
+        {"rule_id": "RACE-005", "score": 0.5, "explanation": "createAndStoreSeed (lines 546-563) and wipeAllKeychainData have no mutex/queue; concurrent creates interleave and last-write-wins, leaving some callers holding a seed that is not the persisted one."},
+        {"rule_id": "OTA-002", "score": 0.5, "explanation": "Lines 553, 570, 590: SecureStore.setItemAsync/getItemAsync/deleteItemAsync are called without SecureStore.isAvailableAsync() or any binary-capability gate."},
+        {"rule_id": "NAME-001", "score": 0.4, "explanation": "Lines 435-436: doc claims 'non-extractable storage on web' while idbPut at line 551 persists the raw base64 seed — the description is actively misleading about the security property."},
+        {"rule_id": "PERF-001", "score": 0.7, "explanation": "Lines 484-535: openDb() creates a new IndexedDB connection per put/get/delete and closes it each time instead of caching the connection."}
+      ]
+    },
+    "SUBMISSION-C": {
+      "holistic_score": 18,
+      "verdict": "FAIL",
+      "strengths": [
+        "Uses crypto.getRandomValues, not Math.random (line 614)",
+        "Web path intends encryption + IndexedDB rather than localStorage (lines 621-622)",
+        "Native path uses expo-secure-store rather than AsyncStorage/localStorage (line 624)"
+      ],
+      "weaknesses": [
+        "Every catch block is silent (lines 627-628, 642-644, 650-652) — storeSeed can fail and the user believes their key is safe; this directly violates the task's explicit 'all catch blocks must log' requirement",
+        "storeSeed swallowing errors means seed loss is invisible: the single worst failure mode for a wallet",
+        "Calls six functions that are never defined or imported (encryptSeed, decryptSeed, indexedDBPut, indexedDBGet, encodeBase64, decodeBase64) — this file does not compile or run",
+        "wipeAllKeychainData deletes only the primary native alias (line 649); the web IndexedDB entry is never removed on web, and the code's own comment admits the backup alias is missed",
+        "retrieveSeed falls through the catch and implicitly returns undefined, violating its declared Promise<Uint8Array | null> type",
+        "No zeroization of seed buffers; no keychainAccessible/requireAuthentication options on SecureStore; generateSeed is pointlessly async"
+      ],
+      "rule_deductions": [
+        {"rule_id": "CATCH-001", "score": 0.0, "explanation": "Lines 627-628, 642-644, 650-652: all three catch blocks are comment-only — errors are swallowed with neither logging nor propagation."},
+        {"rule_id": "ERR-002", "score": 0.0, "explanation": "storeSeed (lines 618-629) resolves successfully even when persistence failed; retrieveSeed and wipe likewise never surface errors to the caller/user, violating task requirement 4."},
+        {"rule_id": "CLEAN-001", "score": 0.0, "explanation": "Lines 647-654: wipe deletes only KEYCHAIN_ALIAS via SecureStore; the web IndexedDB entry written at line 622 is never deleted, and the comment at line 650 admits the backup alias is missed."},
+        {"rule_id": "SEC-010", "score": 0.2, "explanation": "No zeroization of any seed buffer anywhere in the module."},
+        {"rule_id": "STYLE-001", "score": 0.0, "explanation": "encryptSeed, decryptSeed, indexedDBPut, indexedDBGet, encodeBase64, decodeBase64 (lines 621-640) are undefined — fails eslint no-undef and TypeScript compilation outright."},
+        {"rule_id": "TYPE-001", "score": 0.5, "explanation": "retrieveSeed (lines 631-645) is declared Promise<Uint8Array | null> but returns undefined on the swallowed-error path."}
+      ]
+    },
+    "SUBMISSION-D": {
+      "holistic_score": 46,
+      "verdict": "FAIL",
+      "strengths": [
+        "crypto.getRandomValues for seed generation (lines 670-671)",
+        "All catches log via a logger AND rethrow — store failure is made fatal with a clear message (lines 687-690, 704-707, 720-723)",
+        "wipe intends to cover multiple aliases including a backup alias (lines 712-717)",
+        "Web path avoids localStorage in favor of encrypted IndexedDB (lines 677-680)"
+      ],
+      "weaknesses": [
+        "References seven functions that are never defined or imported (encryptSeed, decryptSeed, encodeBase64, decodeBase64, indexedDBPut, indexedDBGet, indexedDBDelete) — the module cannot compile or run as submitted",
+        "wipeAllKeychainData on web calls SecureStore.deleteItemAsync FIRST (lines 713-714); on web that throws (native module absent), so the IndexedDB deletes at lines 716-717 are unreachable — web wipe removes nothing",
+        "Single try around all deletions: the first failing alias aborts the loop, so remaining aliases are never attempted — a partial wipe that still leaves key material behind",
+        "keychainAccessible: WHEN_UNLOCKED (line 684) without THIS_DEVICE_ONLY or requireAuthentication — seed may migrate to device backups/other devices and reads need no user verification",
+        "No zeroization of seed buffers anywhere",
+        "No concurrency control on store/wipe; no SecureStore availability gating"
+      ],
+      "rule_deductions": [
+        {"rule_id": "STYLE-001", "score": 0.0, "explanation": "Lines 679-680, 683, 696-698, 702, 716-717: encryptSeed, decryptSeed, encodeBase64, decodeBase64, indexedDBPut/Get/Delete are undefined and unimported — fails eslint no-undef and does not build."},
+        {"rule_id": "CLEAN-001", "score": 0.3, "explanation": "Lines 710-724: on web, SecureStore.deleteItemAsync at line 713 throws before the IndexedDB deletes run, so web wipe deletes nothing; the single try/catch means any failure skips all remaining aliases instead of attempting each."},
+        {"rule_id": "SEC-010", "score": 0.2, "explanation": "No zeroization: seeds from generateSeed (line 670) and retrieveSeed are never wiped after use, and no zeroize helper is provided."},
+        {"rule_id": "RACE-005", "score": 0.6, "explanation": "storeSeed/wipeAllKeychainData share storage state with no mutex or queue; a concurrent store and wipe can interleave, leaving inconsistent alias state."},
+        {"rule_id": "OTA-002", "score": 0.5, "explanation": "Lines 683, 700, 713-714: SecureStore APIs invoked with no isAvailableAsync/capability check; on web the module is guaranteed absent yet still called in wipe."}
+      ]
+    },
+    "SUBMISSION-E": {
+      "holistic_score": 3,
+      "verdict": "FAIL",
+      "strengths": [
+        "None of substance; the wipe function at least has an accurate comment admitting it is incomplete (line 759)"
+      ],
+      "weaknesses": [
+        "generateSeed uses Math.random() (line 738) — the seed is predictable and all derived Bitcoin keys are brute-forceable; catastrophic for a wallet and an explicit task violation",
+        "Seed and private key stored in localStorage in plaintext, twice (lines 744-745) — explicit task violation",
+        "Hardcoded API secret in source: const API_KEY = 'sk-1234567890abcdef' (line 734), and it is dead code besides",
+        "renderKeyInfo injects the raw seed into the DOM via innerHTML string concatenation (line 765) — leaks the key on screen and is an XSS sink; explicit task violation",
+        "executeCode wraps eval() over an arbitrary string (lines 769-771) — arbitrary code execution primitive; explicit task violation",
+        "All catch blocks are empty (lines 746, 753, 760) — every failure is silent, violating requirement 4",
+        "Wipe removes only 'nuri_seed', orphaning 'nuri_private_key' and any backup (lines 756-761)",
+        "Broken imports/typing: localStorage is not exported by react-native (line 731), encodeBase64 is undefined (line 745), no types anywhere, generateSeed returns number[] not Uint8Array, retrieveSeed JSON.parses external data with no validation"
+      ],
+      "rule_deductions": [
+        {"rule_id": "LS-001", "score": 0.0, "explanation": "Lines 744-745, 751, 765: the seed and a value literally keyed 'nuri_private_key' are written to and read from localStorage in plaintext."},
+        {"rule_id": "CATCH-001", "score": 0.0, "explanation": "Lines 746, 753, 760: three empty catch (e) {} blocks — every storage failure is silently swallowed."},
+        {"rule_id": "ERR-002", "score": 0.0, "explanation": "No error from store/retrieve/wipe is ever logged, propagated, or surfaced to the user."},
+        {"rule_id": "CLEAN-001", "score": 0.0, "explanation": "Lines 756-761: wipeAllKeychainData removes only 'nuri_seed'; 'nuri_private_key' (written at line 745) and the admitted backup are left behind."},
+        {"rule_id": "SEC-010", "score": 0.0, "explanation": "No zeroization anywhere; worse, the seed is deliberately persisted in plaintext and echoed into the DOM (line 765)."},
+        {"rule_id": "STYLE-001", "score": 0.0, "explanation": "Line 731 imports a nonexistent localStorage export from react-native; line 745 calls undefined encodeBase64; untyped functions throughout — fails lint and build."},
+        {"rule_id": "TYPE-001", "score": 0.2, "explanation": "generateSeed (lines 736-739) returns number[] where a key-storage API requires Uint8Array; no types or guards anywhere."},
+        {"rule_id": "VALID-001", "score": 0.3, "explanation": "Line 752: retrieveSeed JSON.parses storage content and returns it with no shape or length validation."},
+        {"rule_id": "DEAD-001", "score": 0.0, "explanation": "Line 734: hardcoded API_KEY constant is never used — dead code that is also an embedded secret."}
+      ]
+    }
+  },
+  "ranking": ["SUBMISSION-A", "SUBMISSION-B", "SUBMISSION-D", "SUBMISSION-C", "SUBMISSION-E"]
+}

@@ -1,0 +1,128 @@
+{
+  "judge_id": "judge-3-maintainability",
+  "reviews": {
+    "SUBMISSION-A": {
+      "holistic_score": 90,
+      "verdict": "PASS",
+      "strengths": [
+        "Complete against all 5 task requirements: CSPRNG seed (line 175-179), keychain/IndexedDB storage, alias-registry-driven wipe (ALL_ALIASES lines 155-156, 405-425), typed KeyStorageError propagation with user-facing messages, and explicit web+native backends",
+        "Excellent error-handling contract: every catch logs AND rethrows a typed KeyStorageError with cause (lines 369-375, 390-395); wipe collects per-alias failures and throws an aggregate instead of stopping early or swallowing (lines 407-423)",
+        "Concurrency handled: mutex serializes all mutating ops (withLock, lines 209-217) and in-flight createAndStoreSeed calls are deduplicated so concurrent callers get the same persisted seed (lines 356-379)",
+        "Web seed encrypted at rest with a non-extractable AES-GCM key, fresh 12-byte IV per encryption (lines 293-299); native path gates on SecureStore.isAvailableAsync so an OTA-updated binary fails loudly rather than crashing (lines 317-325)",
+        "Strong API documentation: buffer ownership and zeroize() responsibility spelled out per function; honest threat-model comment in the header; stored-data shape validated on load (assertSeedShape, lines 181-188; malformed-entry check lines 303-305)",
+        "Native reads require user authentication and WHEN_UNLOCKED_THIS_DEVICE_ONLY (lines 331-334)"
+      ],
+      "weaknesses": [
+        "createAndStoreSeed overwrites any existing seed unconditionally — for a wallet this is irreversible key destruction; the API should refuse or require an explicit overwrite flag",
+        "webLoadSeed line 304 mixes `return Promise.reject(...)` with plain returns inside an async function — works, but a thrown KeyStorageError would be clearer and consistent",
+        "wipeAllKeychainData calls assertNativeAvailable inside the per-alias loop (line 413), re-checking availability N times; hoist it",
+        "Native path stores a base64 string copy of the seed that cannot be zeroized (JS string immutability) — documented as residual (lines 329-330) but still an exposure window"
+      ],
+      "rule_deductions": [
+        {"rule_id": "SEC-010", "score": 0.8, "explanation": "Lines 329-334: the base64 string copy of the seed passed to SecureStore.setItemAsync cannot be zeroized; the module documents this residual honestly and zeroizes buffers elsewhere, but the interim string exposure remains."}
+      ]
+    },
+    "SUBMISSION-B": {
+      "holistic_score": 62,
+      "verdict": "FAIL",
+      "strengths": [
+        "Clean, readable structure with a small public API (createAndStoreSeed/loadSeed/wipeAllKeychainData) and typed KeyStorageError with cause",
+        "Error handling meets the task requirement: every catch logs and rethrows (lines 558-561, 572-575, 592-594); wipe collects failures across the alias registry and throws an aggregate (lines 583-600)",
+        "Alias-registry pattern (ALL_ALIASES, lines 444-445) makes wipe extensible; no localStorage anywhere; CSPRNG via crypto.getRandomValues",
+        "Native writes use WHEN_UNLOCKED_THIS_DEVICE_ONLY and requireAuthentication (lines 553-556)"
+      ],
+      "weaknesses": [
+        "Header doc (lines 434-437) claims 'IndexedDB-backed non-extractable storage' on web, but idbPut stores the raw base64 seed as plaintext (lines 551, 495-507) — no encryption, no non-extractable key. The documentation is materially misleading about the security posture of a signing seed at rest",
+        "No zeroization anywhere: generateSeed/createAndStoreSeed return long-lived plaintext seed buffers with no wipe helper or ownership guidance",
+        "No concurrency control: concurrent createAndStoreSeed calls each generate and persist different seeds, last-write-wins — two callers can hold different 'the' seed; create racing wipe is also unserialized",
+        "No availability gating before SecureStore native calls; no validation of loaded seed length/shape (loadSeed line 571 decodes whatever is stored)",
+        "Comment on line 460 assumes react-native-get-random-values polyfill is installed but nothing here imports or verifies it — on bare RN, crypto.getRandomValues is undefined at runtime"
+      ],
+      "rule_deductions": [
+        {"rule_id": "SEC-010", "score": 0.2, "explanation": "No zeroization of any seed buffer; seeds are additionally persisted as plaintext base64 in IndexedDB on web (lines 546-563), maximizing the exposure window."},
+        {"rule_id": "RACE-005", "score": 0.5, "explanation": "createAndStoreSeed/wipeAllKeychainData have no mutex or dedup; concurrent creates interleave and callers can end up holding a seed that was overwritten (lines 546-563)."},
+        {"rule_id": "OTA-002", "score": 0.5, "explanation": "SecureStore.setItemAsync/getItemAsync/deleteItemAsync are called with no isAvailableAsync/fingerprint gating (lines 553, 570, 590)."},
+        {"rule_id": "VALID-001", "score": 0.6, "explanation": "loadSeed (lines 566-576) decodes stored data without validating it is a well-formed 32-byte seed; corrupted storage yields a garbage seed instead of a clear error."},
+        {"rule_id": "NAME-001", "score": 0.4, "explanation": "Module header lines 434-437 describes the web backend as 'non-extractable storage' while the implementation stores the plaintext base64 seed — misleading naming/documentation of a security property."}
+      ]
+    },
+    "SUBMISSION-C": {
+      "holistic_score": 15,
+      "verdict": "FAIL",
+      "strengths": [
+        "Uses crypto.getRandomValues, not Math.random (line 614)",
+        "Correct platform split intent (web IndexedDB with encryption vs native SecureStore) and avoids localStorage"
+      ],
+      "weaknesses": [
+        "Every catch block is silent (lines 626-628, 642-644, 650-653) — directly violates the task's explicit requirement that all catch blocks log and that storage failures surface to the user; storeSeed failing silently means the wallet believes a key was stored when it was not, which is fund-loss territory",
+        "Calls five functions that are never defined or imported (encryptSeed, indexedDBPut, indexedDBGet, decryptSeed, encodeBase64, decodeBase64) — the module does not compile or run as submitted",
+        "retrieveSeed's catch path falls through with no return, so the function silently resolves undefined, violating its own Promise<Uint8Array | null> signature",
+        "wipeAllKeychainData only deletes the single native alias — on web it never touches IndexedDB at all, and the code's own comment admits the backup alias is missed (lines 647-654)",
+        "generateSeed is pointlessly async; no keychainAccessible/requireAuthentication options on the native write; no zeroization; no doc comments"
+      ],
+      "rule_deductions": [
+        {"rule_id": "CATCH-001", "score": 0.0, "explanation": "Lines 626-628, 642-644, 650-653: all three catch blocks are empty comments; errors are swallowed with no logging or propagation."},
+        {"rule_id": "ERR-002", "score": 0.0, "explanation": "storeSeed/retrieveSeed/wipeAllKeychainData all resolve successfully after a failure; a failed key store is indistinguishable from success to the caller."},
+        {"rule_id": "CLEAN-001", "score": 0.0, "explanation": "wipeAllKeychainData (lines 647-654) deletes only KEYCHAIN_ALIAS via SecureStore; web IndexedDB entries and any backup alias are never removed."},
+        {"rule_id": "SEC-010", "score": 0.2, "explanation": "No zeroization of the seed buffer anywhere."},
+        {"rule_id": "STYLE-001", "score": 0.1, "explanation": "References six undefined identifiers and retrieveSeed has a code path with no return value — this fails tsc/eslint outright."},
+        {"rule_id": "VALID-001", "score": 0.4, "explanation": "Data read back from SecureStore/IndexedDB (lines 634-640) is decoded without any shape/length validation."},
+        {"rule_id": "OTA-002", "score": 0.4, "explanation": "Native SecureStore calls (lines 624, 638, 649) have no availability check."},
+        {"rule_id": "DOC-002", "score": 0.5, "explanation": "The only comments are admissions of missing behavior; the crypto/storage flow itself is undocumented."}
+      ]
+    },
+    "SUBMISSION-D": {
+      "holistic_score": 48,
+      "verdict": "FAIL",
+      "strengths": [
+        "Error handling is the strongest part: every catch logs via a real logger and rethrows (lines 687-690, 704-707, 720-723); storeSeed converts to a clear fatal user-facing error rather than silently downgrading",
+        "wipe targets both primary and backup aliases and both storage backends (lines 712-718), matching the 'remove ALL entries' requirement in intent",
+        "CSPRNG seed generation with explanatory comment (lines 668-673); native write sets keychainAccessible (line 684)"
+      ],
+      "weaknesses": [
+        "Depends on six functions that are neither defined nor imported (encryptSeed, decryptSeed, encodeBase64, decodeBase64, indexedDBPut, indexedDBGet, indexedDBDelete) — the file does not compile; the submission is incomplete against the task",
+        "wipeAllKeychainData calls SecureStore.deleteItemAsync unconditionally, including on web (lines 713-714), where the native module is absent — on web the first delete throws and the IndexedDB deletions on lines 716-717 are never reached, so wipe fails exactly where it must not",
+        "Single try/catch around the whole wipe means one alias failure aborts the sweep of the remaining entries instead of attempting all and aggregating",
+        "No concurrency control on store/wipe; no zeroization of seed buffers; WHEN_UNLOCKED instead of WHEN_UNLOCKED_THIS_DEVICE_ONLY and no requireAuthentication on reads",
+        "No validation of retrieved seed shape; generateSeed needlessly async"
+      ],
+      "rule_deductions": [
+        {"rule_id": "CLEAN-001", "score": 0.4, "explanation": "Lines 710-724: on web the unconditional SecureStore.deleteItemAsync throws before the IndexedDB deletes run, and any single failure aborts the remaining aliases — wipe is not guaranteed to remove ALL entries."},
+        {"rule_id": "CLEAN-002", "score": 0.5, "explanation": "One try/catch wraps the whole sweep (lines 711-723); the first failing delete stops processing of the remaining aliased items instead of sweeping them all."},
+        {"rule_id": "OTA-001", "score": 0.4, "explanation": "Native SecureStore calls are made without gating or platform guard in wipe (lines 713-714 execute even when Platform.OS === 'web'); no isAvailableAsync check anywhere."},
+        {"rule_id": "SEC-010", "score": 0.2, "explanation": "No zeroization of seed buffers after use in storeSeed/retrieveSeed."},
+        {"rule_id": "RACE-005", "score": 0.6, "explanation": "storeSeed/wipeAllKeychainData share storage state with no mutex or dedup; concurrent calls can interleave writes and deletes."},
+        {"rule_id": "STYLE-001", "score": 0.2, "explanation": "Seven referenced helpers (encryptSeed, indexedDBPut, etc.) are undefined/unimported — fails tsc/eslint no-undef."},
+        {"rule_id": "VALID-001", "score": 0.6, "explanation": "retrieveSeed (lines 693-708) decodes stored data without validating it is a well-formed 32-byte seed."}
+      ]
+    },
+    "SUBMISSION-E": {
+      "holistic_score": 3,
+      "verdict": "FAIL",
+      "strengths": [
+        "Function names roughly match the requested API surface (generateSeed/storeSeed/retrieveSeed/wipeAllKeychainData)"
+      ],
+      "weaknesses": [
+        "Violates every explicit security requirement in the task: Math.random for key generation (line 738), secrets in localStorage (lines 744-745, 751), innerHTML with dynamic secret content (line 765), raw eval of arbitrary strings (line 770), and empty catch blocks throughout (lines 746, 753, 760)",
+        "Hardcoded secret API_KEY committed in source (line 733); the private key itself is rendered into the DOM by renderKeyInfo",
+        "Broken imports and types: `import { localStorage } from 'react-native'` (line 731) does not exist; no TypeScript types anywhere; retrieveSeed returns undefined on error; seed is a number[] via JSON, not a Uint8Array",
+        "wipe removes only 'nuri_seed' and leaves 'nuri_private_key' and the admitted backup orphaned (lines 756-761)",
+        "renderKeyInfo and executeCode are unrelated DOM/eval utilities dumped into a key-storage module — no separation of concerns, and executeCode is an outright remote-code-execution primitive"
+      ],
+      "rule_deductions": [
+        {"rule_id": "LS-001", "score": 0.0, "explanation": "Lines 744-745, 751, 765: the seed and a key aliased 'nuri_private_key' are written to and read from localStorage."},
+        {"rule_id": "CATCH-001", "score": 0.0, "explanation": "Lines 746, 753, 760: all catch blocks are literally empty `catch (e) {}`."},
+        {"rule_id": "ERR-002", "score": 0.0, "explanation": "Every operation swallows failures; storeSeed failing is invisible to the caller and user."},
+        {"rule_id": "CLEAN-001", "score": 0.0, "explanation": "wipeAllKeychainData (lines 756-761) removes only 'nuri_seed'; 'nuri_private_key' and the acknowledged backup remain."},
+        {"rule_id": "SEC-010", "score": 0.0, "explanation": "No zeroization; the seed additionally persists as a JSON number array and is rendered into the DOM (line 765)."},
+        {"rule_id": "SANDBOX-002", "score": 0.0, "explanation": "executeCode (lines 769-771) evals arbitrary strings and renderKeyInfo injects dynamic content via innerHTML — both incompatible with any CSP and explicitly banned by the task."},
+        {"rule_id": "VALID-001", "score": 0.0, "explanation": "retrieveSeed JSON.parses stored data with no validation (line 752); executeCode runs unvalidated external input."},
+        {"rule_id": "ARCH-003", "score": 0.2, "explanation": "DOM rendering (renderKeyInfo) and an eval utility (executeCode) are mixed into a key-storage module (lines 763-771)."},
+        {"rule_id": "STYLE-001", "score": 0.0, "explanation": "Nonexistent named import from react-native (line 731), untyped parameters, missing returns — fails lint and type-check."},
+        {"rule_id": "NAME-001", "score": 0.3, "explanation": "Comment 'Fast random generation' (line 737) frames an insecure PRNG as a feature; 'wipeAllKeychainData' does not wipe all data."},
+        {"rule_id": "TYPE-001", "score": 0.4, "explanation": "No types on any signature; seed round-trips through JSON as number[] while consumers of a signing seed need Uint8Array."}
+      ]
+    }
+  },
+  "ranking": ["SUBMISSION-A", "SUBMISSION-B", "SUBMISSION-D", "SUBMISSION-C", "SUBMISSION-E"]
+}
