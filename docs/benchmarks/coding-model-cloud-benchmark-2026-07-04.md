@@ -7,9 +7,28 @@ Scope:
 - Task: `task-001-secure-key-storage`
 - Models: `glm-5.2`, `kimi-k2.7-code`, `minimax-m3`, `deepseek-v4-pro`, `deepseek-v4-flash`, `qwen3-coder:480b`
 - Published machine-readable data: `docs/benchmarks/coding-model-cloud-benchmark-2026-07-04.json`
+- External review prompt: `docs/benchmarks/coding-model-cloud-benchmark-review-prompt-2026-07-04.md`
 - Local raw metrics and responses were saved per call under `runs/tournaments/` during the run.
 
 Important caveat: these scores use the Judicative rubric plus model self-assessment where configured. They are useful first-pass benchmark signals, but final ranking should still use an external blind panel.
+
+## Status At A Glance
+
+What is already in this branch:
+
+1. A cloud-only model tournament runner using Ollama's hosted API.
+2. A published benchmark result for one hard Judicative coding task, `task-001-secure-key-storage`.
+3. A GitHub PR mining pipeline that extracts merged PRs into replay tasks.
+4. A verified oracle replay for `nuri-com/nuri-expo#769`, proving that a mined PR can be checked out at its pre-fix base and have the historical PR diff applied.
+5. A prompt that lets Claude, another model, or a human committee review this benchmark independently.
+
+What this report does not claim yet:
+
+1. It does not claim that all mined PR tasks were run across all models.
+2. It does not claim that `glm-5.2` is universally the best coding model.
+3. It does not claim that self-assessment alone is enough for a final leaderboard.
+
+The narrow conclusion is: on this one cloud-only Judicative coding task, `glm-5.2` with `think=low` produced the best measured overall result. `deepseek-v4-pro` with `think=high` was the best cold high-thinking result and remains a serious candidate, but showed more variance in the feedback run.
 
 ## Method
 
@@ -43,6 +62,37 @@ python3 bench/model_tournament.py \
   --think-levels false --assessment-think false \
   --max-tokens 8000 --skip-run2 --skip-panel
 ```
+
+## Merged PR Replay Pipeline
+
+Yes, the smart next step is to extract real merged PRs and commits into replay tests. That work is already started in this branch.
+
+The miner in `bench/mine_tasks.py` reads GitHub PR history through `gh api`, keeps merged non-dependency PRs, fetches the PR files, inline comments, issue comments, reviews, linked issues, merge commit, and first parent of the merge commit. The first parent becomes the `replay_base_sha`: the pre-fix checkout where an agent should attempt the task. The PR head and merge commit become the historical oracle.
+
+The task rows include:
+
+- source PR URL, title, author, merge time, and labels
+- `replay_base_sha`, `real_fix_head_sha`, and `merge_commit_sha`
+- changed files and changed test files
+- review signal counts and excerpts
+- linked issue references and issue context
+- domain tags such as `arkade`, `wirex`, `zerodev`, `safe`, `passkey`, `mcp`, `race_condition`, `security`, and `stale_state`
+- heuristic difficulty and evaluation mode: `test_backed`, `review_backed`, or `weak_oracle`
+
+Generated task sets currently committed:
+
+- `bench/tasks/nuri-hard-v1.jsonl` - 20 Nuri replay candidates
+- `bench/tasks/nuri-hard-v1-focused.jsonl` - 5 stricter replay candidates
+
+The oracle verifier in `bench/verify_task_oracle.py` validates that a mined task is replayable by cloning the repo, checking out `replay_base_sha`, fetching the real PR diff, and running `git apply --check` plus `git apply`.
+
+Verified oracle:
+
+- `bench/oracle-results/nuri-expo-pr-769.md`
+- PR: `https://github.com/nuri-com/nuri-expo/pull/769`
+- Result: historical diff applies cleanly to replay base `3b5b307f6bf66c25288f2be77467dfb2c0709ec9`
+
+This means the replay benchmark shape is viable. The cloud model results below are still from the single Judicative secure-key-storage task, not yet from the full mined PR replay suite.
 
 ## Cold Run1 - Think Low
 
@@ -118,3 +168,14 @@ Sources:
 5. Next fair judging step:
    - Build a blind panel packet from the best saved `solution/` directories.
    - Use a separate judge team instead of self-assessment to avoid model self-scoring bias.
+
+## Independent Review Instructions
+
+Use `docs/benchmarks/coding-model-cloud-benchmark-review-prompt-2026-07-04.md` to ask Claude, another model, or a human reviewer to audit this benchmark. The intended reviewer task is not to accept the leaderboard blindly. It is to check whether the method, data, caveats, and conclusion are supported by the committed artifacts.
+
+My own read after checking the report, JSON, runner behavior, and oracle state:
+
+- `glm-5.2` with `think=low` is the best result in this exact run.
+- `deepseek-v4-pro` with `think=high` is the strongest high-thinking competitor, but the run history shows variance.
+- Kimi did better with `think=false` than with thinking enabled, because the thinking-enabled calls spent too much budget before final output.
+- The next serious benchmark should run 5-10 mined PR replay tasks with repeated seeds/runs and blind external judging.

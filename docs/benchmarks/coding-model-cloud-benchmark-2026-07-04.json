@@ -2,6 +2,7 @@
   "api": "https://ollama.com/api/chat",
   "caveat": "Scores use Judicative rubric plus self-assessment where configured; final ranking should use an external blind panel.",
   "date": "2026-07-04",
+  "external_review_prompt": "docs/benchmarks/coding-model-cloud-benchmark-review-prompt-2026-07-04.md",
   "headline": {
     "best_cold_high": {
       "model": "deepseek-v4-pro",
@@ -29,6 +30,13 @@
     "deepseek-v4-flash",
     "qwen3-coder:480b"
   ],
+  "pr_replay_status": {
+    "full_replay_suite_run": false,
+    "miner": "bench/mine_tasks.py",
+    "oracle_verifier": "bench/verify_task_oracle.py",
+    "verified_oracle": "bench/oracle-results/nuri-expo-pr-769.md",
+    "verified_replay_pr": "https://github.com/nuri-com/nuri-expo/pull/769"
+  },
   "rows": [
     {
       "assessment_think": "low",

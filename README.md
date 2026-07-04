@@ -14,7 +14,7 @@ The name is deliberate — the kit separates powers:
 
 Measured on myself: one loop through all three branches moved my score from **46.36 (FAIL) to 89.55 (PASS)** — see [RESULTS.md](RESULTS.md).
 
-Latest Ollama Cloud coding-model benchmark: [docs/benchmarks/coding-model-cloud-benchmark-2026-07-04.md](docs/benchmarks/coding-model-cloud-benchmark-2026-07-04.md).
+Latest Ollama Cloud coding-model benchmark: [docs/benchmarks/coding-model-cloud-benchmark-2026-07-04.md](docs/benchmarks/coding-model-cloud-benchmark-2026-07-04.md). External audit prompt: [docs/benchmarks/coding-model-cloud-benchmark-review-prompt-2026-07-04.md](docs/benchmarks/coding-model-cloud-benchmark-review-prompt-2026-07-04.md).
 
 ## Quick Start
 
