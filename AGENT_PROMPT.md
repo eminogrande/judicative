@@ -42,6 +42,35 @@ You are taking a scored coding test. Protocol — follow it exactly:
    under runs/<your-model-name>/ so your work is reproducible.
 ```
 
+## Role 1b — Examinee over MCP (preferred)
+
+Give the agent this repo link and ask it to install the MCP:
+
+```text
+Clone https://github.com/eminogrande/judicative, then install the MCP server:
+
+claude mcp add judicative -- python3 /absolute/path/to/judicative/mcp_server.py
+
+You are taking a scored coding self-test. Protocol — follow it exactly:
+
+1. Call list_tasks, then start_self_test with task_id "task-001-secure-key-storage"
+   and agent_id "<your-model-name>".
+2. For run1, read only the task returned by start_self_test. Do NOT call
+   get_rubric and do NOT read rubric_v2.json, test_fixtures/, runs/, RESULTS.md,
+   or PANEL_REPORT.md before writing run1.
+3. Submit run1 with submit_solution using run_id "run1" and a files object
+   containing every solution file.
+4. Now call get_assessment_template. Read the rubric rules and score every
+   LLM-only rule from 0.0 to 1.0 with one concrete explanation per rule.
+   Be harsh; finding your own real bugs is the assignment.
+5. Call score_saved_run for run1 with those assessments. Read the returned
+   mistakes report and write generalized instructions for run2.
+6. Submit run2 with submit_solution using run_id "run2". Self-assess and
+   re-score run2 the same way.
+7. Call prepare_results_pr. Open the returned PR_BODY.md and use the returned
+   git/gh commands to publish a draft PR with everything under runs/<agent>/<task>/.
+```
+
 ## Role 2 — Second-opinion judge (judge someone else's run)
 
 Give the judging agent the same repository and send:
@@ -90,6 +119,26 @@ Aggregate with `python3 panel.py aggregate ...`. Use at least 3 judges; mix in
 the known-good/known-bad fixture solutions as controls and discard any judge
 that passes the known-bad control.
 
+## Role 3b — OpenRouter judge team
+
+After `panel.py prepare`, run a multi-model committee through OpenRouter:
+
+```bash
+OPENROUTER_API_KEY=... python3 openrouter_panel.py \
+  --packet panel_run/packet.md \
+  --out panel_run/openrouter_judges \
+  --models <model-1> <model-2> <model-3>
+
+python3 panel.py aggregate --dir panel_run \
+  --mapping panel_run/mapping.SEALED.json \
+  --judges panel_run/openrouter_judges/*.json \
+  --rubric rubric_v2.json \
+  --report PANEL_REPORT_OPENROUTER.md
+```
+
+Use different model families when possible. The panel packet is already blinded;
+do not give the OpenRouter judges the mapping file.
+
 ## Comparing results
 
 - Compare **cold run1 vs cold run1** and **improved run2 vs improved run2** —
@@ -98,6 +147,7 @@ that passes the known-bad control.
 - For judged scores, the interesting number is also the **judge disagreement**:
   if two judges differ wildly on the same code, the rubric rule descriptions
   need tightening (open an issue with the disagreement table).
-- Alternatively, skip the manual protocol and take the test over MCP:
-  `claude mcp add judicative -- python3 /path/to/judicative/mcp_server.py`
-  then call list_tasks → get_task → submit_solution.
+- Prefer the MCP protocol for new agents: it writes a reproducible
+  `runs/<agent>/<task>/SUMMARY.md` plus per-run `RESULT.md`, `result.json`,
+  `mistakes_report.md`, optional `assessments.json`, and a `PR_BODY.md` for
+  publishing the run as a draft PR.

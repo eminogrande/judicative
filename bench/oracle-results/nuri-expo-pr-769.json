@@ -1,0 +1,34 @@
+{
+  "actual_changed_files": [
+    "PLANS_ARCHIVE/768-interrupted-arkade-send-strands-funds-se.md",
+    "services/arkade/ArkadeRemoteIdentity.ts"
+  ],
+  "apply_check_passed": true,
+  "apply_check_stderr": "",
+  "apply_passed": true,
+  "apply_stderr": "",
+  "changed_returncode": 0,
+  "changed_test_files": [],
+  "checkout_returncode": 0,
+  "checkout_stderr": "",
+  "clone_returncode": 0,
+  "clone_stderr": "Cloning into '/private/tmp/judicative-oracle/nuri-expo-pr-769-jf4npfag/nuri-expo'...\n",
+  "diff_path": "/private/tmp/judicative-oracle/nuri-expo-pr-769-jf4npfag/pr-769.diff",
+  "diff_returncode": 0,
+  "diff_stderr": "",
+  "evaluation_mode": "review_backed",
+  "expected_changed_files": [
+    "PLANS_ARCHIVE/768-interrupted-arkade-send-strands-funds-se.md",
+    "services/arkade/ArkadeRemoteIdentity.ts"
+  ],
+  "fetch_returncode": 0,
+  "fetch_stderr": "",
+  "missing_expected_files": [],
+  "org": "nuri-com",
+  "replay_base_sha": "3b5b307f6bf66c25288f2be77467dfb2c0709ec9",
+  "repo": "nuri-expo",
+  "source_url": "https://github.com/nuri-com/nuri-expo/pull/769",
+  "task_id": "nuri-expo-pr-769",
+  "untracked_returncode": 0,
+  "workdir": "/private/tmp/judicative-oracle/nuri-expo-pr-769-jf4npfag"
+}

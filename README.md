@@ -14,6 +14,8 @@ The name is deliberate — the kit separates powers:
 
 Measured on myself: one loop through all three branches moved my score from **46.36 (FAIL) to 89.55 (PASS)** — see [RESULTS.md](RESULTS.md).
 
+Latest Ollama Cloud coding-model benchmark: [docs/benchmarks/coding-model-cloud-benchmark-2026-07-04.md](docs/benchmarks/coding-model-cloud-benchmark-2026-07-04.md).
+
 ## Quick Start
 
 ```bash
@@ -22,6 +24,7 @@ python3 judge.py --task task.json --rubric rubric_v2.json --static-only -v
 
 # With LLM (requires API key)
 export JUDGE_LLM_PROVIDER=ollama
+export JUDGE_LLM_MODEL=glm-5.2
 export OLLAMA_API_KEY=...
 python3 judge.py --task task.json --rubric rubric_v2.json -v
 
@@ -150,7 +153,12 @@ Scoring: global penalty model (see above)
 | openai | `OPENAI_API_KEY` | gpt-4o |
 | anthropic | `ANTHROPIC_API_KEY` | claude-sonnet-4-20250514 |
 | openrouter | `OPENROUTER_API_KEY` | anthropic/claude-sonnet-4 |
-| ollama | `OLLAMA_API_KEY` or `OLLAMA_BASE_URL` | glm-5.2 |
+| ollama | `OLLAMA_API_KEY` with `https://ollama.com/api/chat` | glm-5.2 |
+
+By default, the judge is deterministic static analysis plus whatever LLM backend
+is configured through `JUDGE_LLM_PROVIDER`. If no LLM key is configured, runs are
+`static-only` and the score is only a preliminary upper bound. Final model
+results should use either external assessments or a blind panel.
 
 ## Validation Results (honest)
 
@@ -261,13 +269,58 @@ python3 panel.py aggregate --dir panel_run/ --mapping /sealed/mapping.json \
 
 Mix known-good/known-bad fixture solutions into the packet as **controls**: a judge who passes the known-bad submission has disqualified itself. See [PANEL_REPORT.md](PANEL_REPORT.md) for a real 3-judge blind panel over the committed runs.
 
+### OpenRouter judge team
+
+You can turn any blind packet into a multi-model OpenRouter committee:
+
+```bash
+# 1. Build the blind packet.
+python3 panel.py prepare --issue tasks/task-001-secure-key-storage/issue.md \
+    --solutions runs/agent-a/task-001-secure-key-storage/run1/solution/ \
+                runs/agent-b/task-001-secure-key-storage/run1/solution/ \
+                test_fixtures/solution_bad/ \
+    --rubric rubric_v2.json --out panel_run/ \
+    --mapping-out panel_run/mapping.SEALED.json
+
+# 2. Ask OpenRouter models to judge independently.
+OPENROUTER_API_KEY=... python3 openrouter_panel.py \
+    --packet panel_run/packet.md \
+    --out panel_run/openrouter_judges \
+    --models <model-1> <model-2> <model-3>
+
+# 3. Aggregate the committee.
+python3 panel.py aggregate --dir panel_run \
+    --mapping panel_run/mapping.SEALED.json \
+    --judges panel_run/openrouter_judges/*.json \
+    --rubric rubric_v2.json \
+    --report PANEL_REPORT_OPENROUTER.md
+```
+
+Use at least three models where possible. Keep contestant identities out of the
+packet, and include known-good/known-bad controls so a weak judge can disqualify
+itself.
+
 ### MCP server — point any LLM at the test
 
 ```bash
+# Send this repo link, then in the agent's checkout:
+git clone https://github.com/eminogrande/judicative.git
+cd judicative
 claude mcp add judicative -- python3 /path/to/judicative/mcp_server.py
 ```
 
-Exposes `list_tasks`, `get_task`, `submit_solution` (returns the hard score + mistakes report), and `get_rubric`. Stdlib only. Tasks live in `tasks/<task-id>/issue.md` — add a directory to add a task. `AGENT_PROMPT.md` has copy-paste prompts for running any agent as examinee or as second-opinion judge.
+The MCP exposes a full self-test flow, not just a score endpoint:
+
+1. `list_tasks` — discover available tests and the recommended flow
+2. `start_self_test` — get the issue, cold-run rules, and artifact paths
+3. `submit_solution` — submit run files, score them, and persist artifacts under `runs/<agent>/<task>/<run>/`
+4. `get_assessment_template` — get every LLM-only rule the agent must self-score after the cold run
+5. `score_saved_run` — re-score a saved run with self/external assessments
+6. `prepare_results_pr` — write `PR_BODY.md` and return the exact git/gh commands to publish the run as a draft PR
+
+The persisted bundle is committee-friendly: `solution/` contains only the submitted code, while `RESULT.md`, `result.json`, `mistakes_report.md`, `assessments.json`, and `SUMMARY.md` contain the evidence. A judging committee can review the PR directly or use the saved `solution/` directories to build a blind panel packet with `panel.py`.
+
+Stdlib only. Tasks live in `tasks/<task-id>/issue.md` — add a directory to add a task. `AGENT_PROMPT.md` has copy-paste prompts for running any agent as examinee, second-opinion judge, or blind panel judge.
 
 ### Output
 
@@ -303,10 +356,12 @@ Exposes `list_tasks`, `get_task`, `submit_solution` (returns the hard score + mi
 
 ```bash
 python3 test_judge.py
-# 50 tests, all passing
+python3 test_mcp_server.py
+python3 test_openrouter_panel.py
+# judge: 56 tests, all passing
 ```
 
-Covers: rubric validation, string-aware comment stripping (URLs, block comments in strings, Python hashes), all static rules, diff parsing, the scoring model (hard-gate cap, repeat decay, dedup determinism, emphasis clamping, score/verdict coherence, v1+v2 calibration), end-to-end smoke test, CLI.
+Covers: rubric validation, string-aware comment stripping (URLs, block comments in strings, Python hashes), all static rules, diff parsing, the scoring model (hard-gate cap, repeat decay, dedup determinism, emphasis clamping, score/verdict coherence, v1+v2 calibration), end-to-end smoke test, CLI, and the MCP self-test artifact flow.
 
 ## How the Rubric Was Built
 
@@ -331,7 +386,7 @@ Covers: rubric validation, string-aware comment stripping (URLs, block comments 
 ```
 judicative/
 ├── judge.py              # Judicative: judging engine, global penalty scoring, mistakes report
-├── mcp_server.py         # MCP server — any LLM can take the test (stdlib only)
+├── mcp_server.py         # MCP server — self-test flow, persisted results, PR prep
 ├── rubric_v2.json        # The law: 26 categories, data-driven weights, 28 rules
 ├── rubric.json           # v1 rubric (6 categories, for reference)
 ├── scan_all.py           # Legislative: mines a GitHub org into rubric data
@@ -342,6 +397,7 @@ judicative/
 ├── runs/                 # Executive: recorded test runs per agent
 │   └── claude-fable-5/   # run1 (cold), run2 (instructed), assessments, report
 ├── test_fixtures/        # Synthetic solutions for smoke testing
+├── test_mcp_server.py    # MCP self-test artifact flow tests
 ├── RESULTS.md            # Self-test results: 46.36 → 89.55 in one loop
 ├── AGENT_PROMPT.md       # Copy-paste prompts: examinee + second-opinion judge
 └── README.md

@@ -22,3 +22,10 @@ Thumbs.db
 # Results
 results.json
 validation_results.json
+
+# Benchmark mining cache (reproducible via bench/mine_tasks.py)
+bench/cache/
+
+# Cloud benchmark raw artifacts (publish summarized reports under docs/benchmarks/)
+runs/tournament-*/
+runs/tournaments/
