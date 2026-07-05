@@ -14,6 +14,53 @@ The name is deliberate — the kit separates powers:
 
 Measured on myself: one loop through all three branches moved my score from **46.36 (FAIL) to 89.55 (PASS)** — see [RESULTS.md](RESULTS.md).
 
+Latest Ollama Cloud coding-model benchmark: [docs/benchmarks/coding-model-cloud-benchmark-2026-07-04.md](docs/benchmarks/coding-model-cloud-benchmark-2026-07-04.md). External audit prompt: [docs/benchmarks/coding-model-cloud-benchmark-review-prompt-2026-07-04.md](docs/benchmarks/coding-model-cloud-benchmark-review-prompt-2026-07-04.md). Current project learnings: [docs/LEARNINGS.md](docs/LEARNINGS.md).
+
+## Current Status
+
+Judicative is now three things in one repo:
+
+1. A judge for coding-task submissions.
+2. An MCP self-test harness that lets an agent run the test and publish its own results.
+3. A benchmark workbench for comparing coding models on hard Nuri/partner-style tasks.
+
+The first published cloud model tournament used one hard task, `task-001-secure-key-storage`, against six Ollama Cloud coding models. It was run through the native hosted API only, `https://ollama.com/api/chat`.
+
+Headline from that run:
+
+| Result | Model | Mode | Score | Verdict |
+|---|---|---|---:|---|
+| Best cold low-thinking | `glm-5.2` | `think=low` | 88.85 | PASS |
+| Best cold high-thinking | `deepseek-v4-pro` | `think=high` | 83.61 | PASS |
+| Best feedback run | `glm-5.2` | `think=low`, Run2 | 97.00 | PASS |
+
+Interpretation: `glm-5.2` with low thinking won this exact run. That is not yet a universal model ranking. `deepseek-v4-pro` high-thinking remains a serious candidate, but it needs repeated runs and blind judging.
+
+## Cloud-Only Rule
+
+For Ollama model tournaments in this repo, use hosted Ollama Cloud only:
+
+- Use `https://ollama.com/api/chat`.
+- Do not use local Ollama model downloads.
+- Do not use `ollama run`, `ollama pull`, or local `localhost:11434` / `127.0.0.1:11434` endpoints.
+- Do not use device-key local CLI flows for benchmark execution.
+
+This keeps the benchmark reproducible, avoids machine-specific artifacts, and prevents accidentally testing a local model when the intended contestant is a cloud model.
+
+## Replay Benchmark Direction
+
+The smart path is not hand-written toy tasks. It is replaying real merged PRs.
+
+That work is started:
+
+- `bench/mine_tasks.py` mines merged GitHub PRs, review comments, linked issues, changed files, and merge metadata.
+- The merge commit's first parent becomes `replay_base_sha`, the pre-fix checkout where a model must solve the task.
+- The historical PR head/merge becomes the oracle.
+- `bench/verify_task_oracle.py` validates that the historical PR diff applies cleanly from the replay base.
+- `bench/oracle-results/nuri-expo-pr-769.md` proves one mined replay task is viable.
+
+The current cloud scores are still from one Judicative task, not from the full mined replay suite. The next serious benchmark should run 5-10 mined PR replay tasks with repeated runs and blind external judging.
+
 ## Quick Start
 
 ```bash
@@ -22,6 +69,7 @@ python3 judge.py --task task.json --rubric rubric_v2.json --static-only -v
 
 # With LLM (requires API key)
 export JUDGE_LLM_PROVIDER=ollama
+export JUDGE_LLM_MODEL=glm-5.2
 export OLLAMA_API_KEY=...
 python3 judge.py --task task.json --rubric rubric_v2.json -v
 
@@ -150,7 +198,12 @@ Scoring: global penalty model (see above)
 | openai | `OPENAI_API_KEY` | gpt-4o |
 | anthropic | `ANTHROPIC_API_KEY` | claude-sonnet-4-20250514 |
 | openrouter | `OPENROUTER_API_KEY` | anthropic/claude-sonnet-4 |
-| ollama | `OLLAMA_API_KEY` or `OLLAMA_BASE_URL` | glm-5.2 |
+| ollama | `OLLAMA_API_KEY` with `https://ollama.com/api/chat` | glm-5.2 |
+
+By default, the judge is deterministic static analysis plus whatever LLM backend
+is configured through `JUDGE_LLM_PROVIDER`. If no LLM key is configured, runs are
+`static-only` and the score is only a preliminary upper bound. Final model
+results should use either external assessments or a blind panel.
 
 ## Validation Results (honest)
 
@@ -261,13 +314,58 @@ python3 panel.py aggregate --dir panel_run/ --mapping /sealed/mapping.json \
 
 Mix known-good/known-bad fixture solutions into the packet as **controls**: a judge who passes the known-bad submission has disqualified itself. See [PANEL_REPORT.md](PANEL_REPORT.md) for a real 3-judge blind panel over the committed runs.
 
+### OpenRouter judge team
+
+You can turn any blind packet into a multi-model OpenRouter committee:
+
+```bash
+# 1. Build the blind packet.
+python3 panel.py prepare --issue tasks/task-001-secure-key-storage/issue.md \
+    --solutions runs/agent-a/task-001-secure-key-storage/run1/solution/ \
+                runs/agent-b/task-001-secure-key-storage/run1/solution/ \
+                test_fixtures/solution_bad/ \
+    --rubric rubric_v2.json --out panel_run/ \
+    --mapping-out panel_run/mapping.SEALED.json
+
+# 2. Ask OpenRouter models to judge independently.
+OPENROUTER_API_KEY=... python3 openrouter_panel.py \
+    --packet panel_run/packet.md \
+    --out panel_run/openrouter_judges \
+    --models <model-1> <model-2> <model-3>
+
+# 3. Aggregate the committee.
+python3 panel.py aggregate --dir panel_run \
+    --mapping panel_run/mapping.SEALED.json \
+    --judges panel_run/openrouter_judges/*.json \
+    --rubric rubric_v2.json \
+    --report PANEL_REPORT_OPENROUTER.md
+```
+
+Use at least three models where possible. Keep contestant identities out of the
+packet, and include known-good/known-bad controls so a weak judge can disqualify
+itself.
+
 ### MCP server — point any LLM at the test
 
 ```bash
+# Send this repo link, then in the agent's checkout:
+git clone https://github.com/eminogrande/judicative.git
+cd judicative
 claude mcp add judicative -- python3 /path/to/judicative/mcp_server.py
 ```
 
-Exposes `list_tasks`, `get_task`, `submit_solution` (returns the hard score + mistakes report), and `get_rubric`. Stdlib only. Tasks live in `tasks/<task-id>/issue.md` — add a directory to add a task. `AGENT_PROMPT.md` has copy-paste prompts for running any agent as examinee or as second-opinion judge.
+The MCP exposes a full self-test flow, not just a score endpoint:
+
+1. `list_tasks` — discover available tests and the recommended flow
+2. `start_self_test` — get the issue, cold-run rules, and artifact paths
+3. `submit_solution` — submit run files, score them, and persist artifacts under `runs/<agent>/<task>/<run>/`
+4. `get_assessment_template` — get every LLM-only rule the agent must self-score after the cold run
+5. `score_saved_run` — re-score a saved run with self/external assessments
+6. `prepare_results_pr` — write `PR_BODY.md` and return the exact git/gh commands to publish the run as a draft PR
+
+The persisted bundle is committee-friendly: `solution/` contains only the submitted code, while `RESULT.md`, `result.json`, `mistakes_report.md`, `assessments.json`, and `SUMMARY.md` contain the evidence. A judging committee can review the PR directly or use the saved `solution/` directories to build a blind panel packet with `panel.py`.
+
+Stdlib only. Tasks live in `tasks/<task-id>/issue.md` — add a directory to add a task. `AGENT_PROMPT.md` has copy-paste prompts for running any agent as examinee, second-opinion judge, or blind panel judge.
 
 ### Output
 
@@ -303,10 +401,13 @@ Exposes `list_tasks`, `get_task`, `submit_solution` (returns the hard score + mi
 
 ```bash
 python3 test_judge.py
-# 50 tests, all passing
+python3 test_model_tournament.py
+python3 test_mcp_server.py
+python3 test_openrouter_panel.py
+python3 test_bench_mine_tasks.py
 ```
 
-Covers: rubric validation, string-aware comment stripping (URLs, block comments in strings, Python hashes), all static rules, diff parsing, the scoring model (hard-gate cap, repeat decay, dedup determinism, emphasis clamping, score/verdict coherence, v1+v2 calibration), end-to-end smoke test, CLI.
+Covers: rubric validation, string-aware comment stripping (URLs, block comments in strings, Python hashes), prose/string false-positive hardening, all static rules, diff parsing, the scoring model (hard-gate cap, repeat decay, dedup determinism, emphasis clamping, score/verdict coherence, v1+v2 calibration), end-to-end smoke test, CLI, MCP self-test artifact flow, cloud tournament guardrails, OpenRouter panel helper, and GitHub replay-task mining.
 
 ## How the Rubric Was Built
 
@@ -318,20 +419,24 @@ Covers: rubric validation, string-aware comment stripping (URLs, block comments 
 
 ## Known Limitations (honest)
 
-- **9.9% F1 static-only** — 24 of 28 categories need the LLM layer, which is untested with a real API key
-- **LLM layer never executed** — the Ollama backend is wired but has not been validated end-to-end
-- **Holistic prompt truncates at 6000 chars** — large solutions lose context
-- **No `--diffs` CLI flag** — `parse_diff()` exists but isn't wired to CLI
-- **Rubric is crypto-wallet-specific** — the top categories (race_condition, stale_state, ota_native_boundary) reflect nuri-com's codebase. Split into base + crypto-specific for generality
-- **39.5% of comments unclassified** — 1,568 of 3,972 comments didn't match any keyword pattern. There may be patterns we're missing
-- **Ground truth is all bot comments** — 90% of review comments are from CodeRabbit, Gemini, and Codex bots. The taxonomy reflects what bots flag, not necessarily what humans care about
+- **9.9% F1 static-only** — 24 of 28 categories need semantic review. The LLM-backed flow exists, but static scores alone remain weak.
+- **Single-task cloud model result** — the published cloud tournament is useful signal, not a full leaderboard.
+- **Full replay suite not run yet** — PR mining and oracle verification exist, but the mined PR tasks have not all been run across models.
+- **Self-assessment bias** — self/external assessments help the loop, but final model ranking needs a blind panel.
+- **Holistic prompt truncates at 6000 chars** — large solutions lose context.
+- **No `--diffs` CLI flag** — `parse_diff()` exists but isn't wired to CLI.
+- **Rubric is crypto-wallet-specific** — the top categories (race_condition, stale_state, ota_native_boundary) reflect nuri-com's codebase. Split into base + crypto-specific for generality.
+- **39.5% of comments unclassified** — 1,568 of 3,972 comments didn't match any keyword pattern. There may be patterns we're missing.
+- **Ground truth is mostly bot comments** — review comments are heavily from CodeRabbit, Gemini, and Codex bots. The taxonomy reflects what reviewers flag, not necessarily all human priorities.
 
 ## Project Structure
 
 ```
 judicative/
+├── bench/                # Replay-task mining, oracle verification, model tournaments
+├── docs/                 # Benchmark reports, review prompts, learnings
 ├── judge.py              # Judicative: judging engine, global penalty scoring, mistakes report
-├── mcp_server.py         # MCP server — any LLM can take the test (stdlib only)
+├── mcp_server.py         # MCP server — self-test flow, persisted results, PR prep
 ├── rubric_v2.json        # The law: 26 categories, data-driven weights, 28 rules
 ├── rubric.json           # v1 rubric (6 categories, for reference)
 ├── scan_all.py           # Legislative: mines a GitHub org into rubric data
@@ -342,6 +447,7 @@ judicative/
 ├── runs/                 # Executive: recorded test runs per agent
 │   └── claude-fable-5/   # run1 (cold), run2 (instructed), assessments, report
 ├── test_fixtures/        # Synthetic solutions for smoke testing
+├── test_mcp_server.py    # MCP self-test artifact flow tests
 ├── RESULTS.md            # Self-test results: 46.36 → 89.55 in one loop
 ├── AGENT_PROMPT.md       # Copy-paste prompts: examinee + second-opinion judge
 └── README.md
@@ -360,12 +466,12 @@ Edit `rubric_v2.json`. Each rule needs:
 
 ## Next Steps
 
-1. **Second opinions** — have other LLMs judge the committed runs (`AGENT_PROMPT.md`, Role 2) and measure judge disagreement per rule
-2. **More tasks** — 5–10 tasks covering the top rubric categories, so scores are a benchmark rather than an anecdote
-3. **Test the LLM layer live** with an API key — activates the remaining rules and should lift recall from 5.7% toward 20-40%
-4. **Multi-org legislative** — run `scan_all.py` against additional respected orgs/accounts and merge rubrics
-5. **Wire `--diffs` flag** for PR-based judging
-6. **Mine the 1,568 unclassified comments** for missed patterns
+1. **Run the mined PR replay suite** — 5-10 tasks across Nuri, Arkade, Wirex, ZeroDev, and Safe.
+2. **Repeat the cloud tournaments** — cold Run1 and feedback Run2, with variance, token, latency, and cost reporting.
+3. **Use blind external judges** — Claude, OpenRouter committee, and human review where useful.
+4. **Promote objective checks** — repo tests, typecheck, lint, oracle-specific tests, patch scope, and applyability.
+5. **Wire `--diffs` flag** for PR-based judging.
+6. **Mine the 1,568 unclassified comments** for missed patterns.
 
 ## Related Work
 

@@ -24,7 +24,7 @@ LLM Provider:
     Set JUDGE_LLM_PROVIDER and corresponding API key env var:
       - openai:    OPENAI_API_KEY, model: gpt-4o (default)
       - anthropic: ANTHROPIC_API_KEY, model: claude-sonnet-4-20250514
-      - ollama:    OLLAMA_API_KEY (if cloud), model: glm-5.2 / kimi-k2.6 etc.
+      - ollama:    OLLAMA_API_KEY, model: glm-5.2 / kimi-k2.7-code
       - openrouter: OPENROUTER_API_KEY, model: any
     Or use --static-only to skip LLM entirely.
 """
@@ -36,9 +36,23 @@ import sys
 import os
 import subprocess
 import textwrap
+import urllib.parse
 from typing import Dict, List, Any, Tuple, Optional
 from dataclasses import dataclass, field
 from pathlib import Path
+
+OLLAMA_CLOUD_BASE_URL = "https://ollama.com"
+
+
+def validate_ollama_cloud_config(model: str, base_url: str) -> None:
+    parsed = urllib.parse.urlparse(base_url.rstrip("/"))
+    if parsed.scheme != "https" or parsed.netloc != "ollama.com" or parsed.path not in ("", "/"):
+        raise ValueError(
+            f"Refusing non-cloud Ollama base URL: {base_url}. "
+            f"Use {OLLAMA_CLOUD_BASE_URL}."
+        )
+    if not model.strip():
+        raise ValueError("Ollama model is required.")
 
 # ==================== Data Models ====================
 
@@ -368,6 +382,71 @@ def parse_diff(diff_text: str) -> Dict[str, str]:
 
 # ==================== Layer 1: Static Analysis ====================
 
+PROSE_EXTS = {'.md', '.markdown', '.txt', '.rst', '.adoc'}
+STRING_INSENSITIVE_STATIC_RULES = {
+    'SEC-003',  # Math.random() call, not prose/string mentions
+    'SEC-004',  # eval()/Function constructor call, not prose/string mentions
+    'SEC-005',  # innerHTML assignment, not prose/string mentions
+    'SEC-008',  # v1 eval()/Function constructor rule
+    'SEC-009',  # v1 innerHTML assignment rule
+}
+
+def should_run_static_rule(file_path: str, rule: dict) -> bool:
+    """Return whether a static code rule should run against this file.
+
+    Security/code regexes should not fire on prose files. A README saying
+    "Never use Math.random()" is documentation, not a Math.random() call.
+    Future rules can opt back into prose scanning with scan_prose=true.
+    """
+    ext = os.path.splitext(file_path)[1].lower()
+    allowed_exts = rule.get('file_extensions')
+    if allowed_exts and ext not in allowed_exts:
+        return False
+    if ext in PROSE_EXTS and not rule.get('scan_prose', False):
+        return False
+    return True
+
+def blank_string_literals(code: str, file_ext: str) -> str:
+    """Replace string literal contents with spaces, preserving line numbers.
+
+    Used only for call/assignment regexes where matching inside a string is a
+    false positive, while matching the code around the string still matters.
+    """
+    if file_ext not in ('.ts', '.tsx', '.js', '.jsx', '.json', '.go', '.java', '.c', '.cpp', '.h', '.rs', '.swift'):
+        return code
+
+    result = []
+    in_single = in_double = in_template = False
+    escape = False
+    for ch in code:
+        if escape:
+            result.append('\n' if ch == '\n' else ' ')
+            escape = False
+            continue
+        if in_single or in_double or in_template:
+            if ch == '\\':
+                result.append(' ')
+                escape = True
+                continue
+            if (in_single and ch == "'") or (in_double and ch == '"') or (in_template and ch == '`'):
+                in_single = in_double = in_template = False
+                result.append(' ')
+            else:
+                result.append('\n' if ch == '\n' else ' ')
+            continue
+        if ch == "'":
+            in_single = True
+            result.append(' ')
+        elif ch == '"':
+            in_double = True
+            result.append(' ')
+        elif ch == '`':
+            in_template = True
+            result.append(' ')
+        else:
+            result.append(ch)
+    return ''.join(result)
+
 def run_static_checks(file_path: str, code: str, rules: List[dict]) -> List[Finding]:
     """Run regex-based static checks against a single file."""
     findings = []
@@ -379,13 +458,18 @@ def run_static_checks(file_path: str, code: str, rules: List[dict]) -> List[Find
     for rule in rules:
         if rule.get('check_type') != 'static':
             continue
+        if not should_run_static_rule(file_path, rule):
+            continue
         pattern = rule.get('pattern')
         if not pattern:
             continue
+        rule_code = clean_code
+        if rule.get('id') in STRING_INSENSITIVE_STATIC_RULES:
+            rule_code = blank_string_literals(clean_code, ext)
 
         try:
-            for match in re.finditer(pattern, clean_code, re.MULTILINE | re.IGNORECASE):
-                line_num = clean_code.count('\n', 0, match.start()) + 1
+            for match in re.finditer(pattern, rule_code, re.MULTILINE | re.IGNORECASE):
+                line_num = rule_code.count('\n', 0, match.start()) + 1
                 findings.append(Finding(
                     rule_id=rule['id'],
                     rule_name=rule['name'],
@@ -442,18 +526,23 @@ class LLMBackend:
                 self.api_key = os.environ['OPENROUTER_API_KEY']
                 self.model = self.model or 'anthropic/claude-sonnet-4'
                 self.available = True
-            elif os.environ.get('OLLAMA_API_KEY') or os.environ.get('OLLAMA_BASE_URL'):
+            elif os.environ.get('OLLAMA_API_KEY'):
                 self.provider = 'ollama'
                 self.api_key = os.environ.get('OLLAMA_API_KEY', '')
-                self.base_url = self.base_url or os.environ.get('OLLAMA_BASE_URL', 'https://api.ollama.cloud/v1')
+                self.base_url = self.base_url or OLLAMA_CLOUD_BASE_URL
                 self.model = self.model or 'glm-5.2'
                 self.available = True
-        elif self.provider and self.api_key:
-            self.available = True
+        elif self.provider:
+            if self.provider == 'ollama':
+                self.api_key = os.environ.get('OLLAMA_API_KEY', '')
+                self.base_url = self.base_url or OLLAMA_CLOUD_BASE_URL
+            self.available = bool(self.api_key)
             if not self.model:
                 defaults = {'openai': 'gpt-4o', 'anthropic': 'claude-sonnet-4-20250514',
                            'ollama': 'glm-5.2', 'openrouter': 'anthropic/claude-sonnet-4'}
                 self.model = defaults.get(self.provider, 'gpt-4o')
+            if not self.base_url and self.provider == 'ollama':
+                self.base_url = OLLAMA_CLOUD_BASE_URL
 
         if self.available:
             # Set default base URLs
@@ -463,6 +552,8 @@ class LLMBackend:
                     'anthropic': 'https://api.anthropic.com/v1',
                     'openrouter': 'https://openrouter.ai/api/v1',
                 }.get(self.provider, '')
+            if self.provider == 'ollama':
+                validate_ollama_cloud_config(self.model, self.base_url)
 
     def call(self, prompt: str, system: str = "You are an expert code reviewer.", temperature: float = 0.0) -> dict:
         """Call the LLM and return parsed JSON dict. Returns {'score': float, 'explanation': str}."""
@@ -470,7 +561,9 @@ class LLMBackend:
             return {"score": 0.5, "explanation": "LLM not configured — neutral score."}
 
         try:
-            if self.provider in ('openai', 'openrouter', 'ollama'):
+            if self.provider == 'ollama':
+                return self._call_ollama_native(prompt, system, temperature)
+            elif self.provider in ('openai', 'openrouter'):
                 return self._call_openai_compatible(prompt, system, temperature)
             elif self.provider == 'anthropic':
                 return self._call_anthropic(prompt, system, temperature)
@@ -479,7 +572,7 @@ class LLMBackend:
             return {"score": 0.5, "explanation": f"LLM call failed: {e}"}
 
     def _call_openai_compatible(self, prompt: str, system: str, temperature: float) -> dict:
-        """OpenAI-compatible API (OpenAI, OpenRouter, Ollama Cloud)."""
+        """OpenAI-compatible API (OpenAI, OpenRouter)."""
         import urllib.request, urllib.error
 
         url = f"{self.base_url}/chat/completions"
@@ -507,6 +600,39 @@ class LLMBackend:
 
         text = data['choices'][0]['message']['content']
         # Extract JSON from response (may be wrapped in ```json blocks)
+        text = re.sub(r'^```json\s*', '', text.strip())
+        text = re.sub(r'\s*```$', '', text.strip())
+        return json.loads(text)
+
+    def _call_ollama_native(self, prompt: str, system: str, temperature: float) -> dict:
+        """Ollama Cloud native API."""
+        import urllib.request, urllib.error
+
+        validate_ollama_cloud_config(self.model, self.base_url)
+        url = f"{self.base_url.rstrip('/')}/api/chat"
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.api_key}",
+        }
+        body = json.dumps({
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": prompt},
+            ],
+            "stream": False,
+            "format": "json",
+            "options": {
+                "temperature": temperature,
+                "num_predict": 8000,
+            },
+        }).encode()
+
+        req = urllib.request.Request(url, data=body, headers=headers)
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            data = json.loads(resp.read())
+
+        text = data['message']['content']
         text = re.sub(r'^```json\s*', '', text.strip())
         text = re.sub(r'\s*```$', '', text.strip())
         return json.loads(text)

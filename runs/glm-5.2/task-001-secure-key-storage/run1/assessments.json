@@ -1,0 +1,546 @@
+{
+  "glm-5.2-run1": [
+    {
+      "explanation": "n/a \u2014 no useEffect or event handlers; this is a storage module, not a React component",
+      "rule_id": "RACE-003",
+      "score": 1.0
+    },
+    {
+      "explanation": "n/a \u2014 no fetch calls in the module",
+      "rule_id": "RACE-004",
+      "score": 1.0
+    },
+    {
+      "explanation": "WebSecureStorageAdapter.getOrCreateEncryptionKey (line ~120) has a race: two concurrent calls can both see no master-key and both generate+store one. The IDB readwrite transaction doesn't prevent this. cachedAdapter singleton init also races if called concurrently from different async contexts.",
+      "rule_id": "RACE-005",
+      "score": 0.3
+    },
+    {
+      "explanation": "In openDB(), the db reference returned is used after the Promise resolves, but another concurrent operation could close or delete the database (wipe() calls db.close() then indexedDB.deleteDatabase). A getItem call holding a stale db reference would fail.",
+      "rule_id": "STALE-002",
+      "score": 0.5
+    },
+    {
+      "explanation": "n/a \u2014 no balance display in this module",
+      "rule_id": "STALE-003",
+      "score": 1.0
+    },
+    {
+      "explanation": "n/a \u2014 no server-side data that needs refetch on focus/reconnect",
+      "rule_id": "STALE-004",
+      "score": 1.0
+    },
+    {
+      "explanation": "n/a \u2014 no modals or overlay layers",
+      "rule_id": "UI-001",
+      "score": 1.0
+    },
+    {
+      "explanation": "n/a \u2014 no back button handling",
+      "rule_id": "UI-002",
+      "score": 1.0
+    },
+    {
+      "explanation": "n/a \u2014 no React components with props",
+      "rule_id": "UI-003",
+      "score": 1.0
+    },
+    {
+      "explanation": "No circular dependencies \u2014 index.ts imports from secureKeyStorage.ts, no reverse imports",
+      "rule_id": "ARCH-001",
+      "score": 1.0
+    },
+    {
+      "explanation": "The main file mixes platform detection, crypto utilities, two storage adapters, factory, and high-level API all in one ~400-line file. Adapters and crypto utils should be separate modules.",
+      "rule_id": "ARCH-002",
+      "score": 0.5
+    },
+    {
+      "explanation": "secureKeyStorage.ts has multiple responsibilities: type definitions, platform detection, crypto helpers, web adapter, RN adapter, factory, and high-level API. Should be split into types.ts, platform.ts, crypto.ts, webAdapter.ts, rnAdapter.ts, index.ts.",
+      "rule_id": "ARCH-003",
+      "score": 0.4
+    },
+    {
+      "explanation": "Code is generally ESLint-clean; minor: `any` type for keychain in RN adapter would trigger @typescript-eslint/no-explicit-any.",
+      "rule_id": "STYLE-001",
+      "score": 0.9
+    },
+    {
+      "explanation": "Imports are minimal and properly ordered \u2014 only internal relative imports.",
+      "rule_id": "STYLE-002",
+      "score": 1.0
+    },
+    {
+      "explanation": "n/a \u2014 no signature verification in this module",
+      "rule_id": "SEC-007",
+      "score": 1.0
+    },
+    {
+      "explanation": "AES-GCM IV is generated via crypto.getRandomValues (12 bytes) which is cryptographically random, but there's no explicit uniqueness check before use. If the RNG produced a duplicate IV (astronomically unlikely but possible), the encryption would be compromised. No IV tracking/counter.",
+      "rule_id": "SEC-008",
+      "score": 0.7
+    },
+    {
+      "explanation": "n/a \u2014 no WebView or iframe content",
+      "rule_id": "SEC-009",
+      "score": 1.0
+    },
+    {
+      "explanation": "Critical: Uint8Array from getRandomValues, the encrypted ciphertext, IV, and TextEncoder output are never zeroed after use. The seed hex string persists in memory. No explicit memory wiping (fill(0) on arrays) after operations complete. Sensitive data lingers in GC-managed memory.",
+      "rule_id": "SEC-010",
+      "score": 0.2
+    },
+    {
+      "explanation": "RN adapter calls require('react-native-keychain') which is a native module. If an OTA update ships JS that references a native module not in the current binary, it crashes. The try/catch fallback to expo-secure-store helps, but the error handling path itself calls require('expo-secure-store') which could also be missing.",
+      "rule_id": "OTA-001",
+      "score": 0.5
+    },
+    {
+      "explanation": "No binary fingerprint or version check before calling native APIs. The code assumes react-native-keychain or expo-secure-store is available without checking the native binary version. An OTA update could ship code that calls APIs not present in older binaries.",
+      "rule_id": "OTA-002",
+      "score": 0.3
+    },
+    {
+      "explanation": "Errors are generally propagated via throw with SecureStorageError wrappers. Minor: getTrackedKeys() swallows errors and returns [] instead of propagating.",
+      "rule_id": "ERR-002",
+      "score": 0.9
+    },
+    {
+      "explanation": "No distinction between transient and non-transient failures. A failed setItem due to invalid input (non-transient) is treated the same as a transient IndexedDB lock failure. Callers cannot distinguish retryable from non-retryable errors.",
+      "rule_id": "ERR-003",
+      "score": 0.7
+    },
+    {
+      "explanation": "n/a \u2014 no address handling in this module",
+      "rule_id": "DATA-001",
+      "score": 1.0
+    },
+    {
+      "explanation": "RN adapter silently falls back from react-native-keychain to expo-secure-store. This is a storage downgrade \u2014 expo-secure-store has different security properties (e.g., no keychain hardware backing on some platforms). The user is not informed of the downgrade. Error is logged but not surfaced.",
+      "rule_id": "DATA-002",
+      "score": 0.4
+    },
+    {
+      "explanation": "n/a \u2014 no stale armed results pattern",
+      "rule_id": "DATA-003",
+      "score": 1.0
+    },
+    {
+      "explanation": "Critical operations throw on failure. Minor: wipe() in RN adapter continues past individual key deletion failures (line ~310) \u2014 a failed wipe of a specific key is logged but not fatal.",
+      "rule_id": "DATA-004",
+      "score": 0.9
+    },
+    {
+      "explanation": "No deduplication of concurrent operations. Two concurrent setItem('wallet-seed', value1) and setItem('wallet-seed', value2) calls will race \u2014 the last one to complete wins, with no ordering guarantee. No mutex/queue on write operations.",
+      "rule_id": "DATA-005",
+      "score": 0.3
+    },
+    {
+      "explanation": "n/a \u2014 no retry/backoff logic in the module",
+      "rule_id": "TIMEOUT-001",
+      "score": 1.0
+    },
+    {
+      "explanation": "n/a \u2014 no retry logic that could swallow non-transient failures",
+      "rule_id": "TIMEOUT-002",
+      "score": 1.0
+    },
+    {
+      "explanation": "MockAdapter class in test file is declared but never used in any test case. The SecureStorageAdapter import in the test file is only used as a type for MockAdapter.",
+      "rule_id": "DEAD-001",
+      "score": 0.5
+    },
+    {
+      "explanation": "No unreachable code \u2014 all branches have reachable paths",
+      "rule_id": "DEAD-002",
+      "score": 1.0
+    },
+    {
+      "explanation": "getTrackedKeys() catch block (line ~330) returns [] instead of propagating \u2014 this swallows storage errors. RN adapter wipe() inner catch (line ~310) logs but doesn't propagate individual key wipe failures. expo-secure-store fallback catch in loadKeychain catches the first require error and tries another module, but doesn't re-throw the original if both fail.",
+      "rule_id": "CATCH-001",
+      "score": 0.3
+    },
+    {
+      "explanation": "n/a \u2014 no interactive UI elements",
+      "rule_id": "A11Y-003",
+      "score": 1.0
+    },
+    {
+      "explanation": "Code fences in README.md have language labels (typescript, bash)",
+      "rule_id": "DOC-001",
+      "score": 1.0
+    },
+    {
+      "explanation": "AES-GCM encryption/decryption lacks inline comments explaining why 12-byte IV is used (NIST recommendation for GCM mode). The key derivation/storage strategy isn't documented. The singleton pattern in WebSecureStorageAdapter isn't explained. No comments on security tradeoffs of storing the encryption key in IndexedDB.",
+      "rule_id": "DOC-002",
+      "score": 0.5
+    },
+    {
+      "explanation": "No validation of data returned from external sources. keychain.getGenericPassword() result is used without checking its shape \u2014 assumes it has a .password property. The expo-secure-store wrapper assumes getItemAsync returns a string. IndexedDB getRequest.result is used without type checking.",
+      "rule_id": "VALID-001",
+      "score": 0.3
+    },
+    {
+      "explanation": "trackedKeys from JSON.parse(result.password) is not validated per-item. If the stored JSON is corrupted or contains non-string entries, the wipe() method will iterate invalid data. No schema validation on the parsed array.",
+      "rule_id": "VALID-002",
+      "score": 0.2
+    },
+    {
+      "explanation": "n/a \u2014 no iframe content",
+      "rule_id": "SANDBOX-001",
+      "score": 1.0
+    },
+    {
+      "explanation": "n/a \u2014 no CSP headers to set (module-level code)",
+      "rule_id": "SANDBOX-002",
+      "score": 1.0
+    },
+    {
+      "explanation": "n/a \u2014 no resolveRequest pattern",
+      "rule_id": "STATE-001",
+      "score": 1.0
+    },
+    {
+      "explanation": "cachedAdapter singleton could get out of sync with platform state. If resetSecureStorageAdapter() is called but a reference to the old adapter is held, operations on the old adapter could conflict with the new one. Minor issue.",
+      "rule_id": "STATE-002",
+      "score": 0.8
+    },
+    {
+      "explanation": "openDB() is called on every setItem, getItem, and removeItem \u2014 each call opens a new IDBDatabase connection. The database connection should be cached/reused. getOrCreateEncryptionKey() also opens DB and does a transaction on every encrypt/decrypt call.",
+      "rule_id": "PERF-001",
+      "score": 0.3
+    },
+    {
+      "explanation": "Names are generally clear. Minor: keyNameForKey is a bit redundant; sanitizeKey would be clearer. loadKeychain does more than load \u2014 it also sets up fallbacks.",
+      "rule_id": "NAME-001",
+      "score": 0.9
+    },
+    {
+      "explanation": "n/a \u2014 new module, no existing behavior to preserve",
+      "rule_id": "PRES-001",
+      "score": 1.0
+    },
+    {
+      "explanation": "n/a \u2014 no balance display",
+      "rule_id": "BAL-001",
+      "score": 1.0
+    },
+    {
+      "explanation": "keychain: any in ReactNativeSecureStorageAdapter is an unsafe type. getRequest.result is untyped in the web adapter. The expo-secure-store shim object is untyped. No type guards on external data.",
+      "rule_id": "TYPE-001",
+      "score": 0.4
+    },
+    {
+      "explanation": "Uses SecureStore.WHEN_UNLOCKED which is a valid expo-secure-store option, but doesn't verify the enum exists at runtime. If the expo-secure-store version doesn't export WHEN_UNLOCKED, it would be undefined and silently fail.",
+      "rule_id": "TYPE-002",
+      "score": 0.7
+    },
+    {
+      "explanation": "n/a \u2014 no passkey operations in this module",
+      "rule_id": "UV-001",
+      "score": 1.0
+    },
+    {
+      "explanation": "SecureStorageAdapter interface is properly implemented by both adapters. Minor: the expo-secure-store shim doesn't fully implement the keychain API surface (resetGenericPassword throws).",
+      "rule_id": "API-001",
+      "score": 0.9
+    },
+    {
+      "explanation": "n/a \u2014 no fetch/XMLHttpRequest interceptors",
+      "rule_id": "API-002",
+      "score": 1.0
+    },
+    {
+      "explanation": "n/a \u2014 no raw HTML files",
+      "rule_id": "API-003",
+      "score": 1.0
+    },
+    {
+      "explanation": "RN adapter wipe() only removes tracked keys. If keys were stored by a previous version that didn't track them, or if the tracked_keys entry is corrupted/deleted, those orphaned keychain entries survive the wipe. Not a complete keychain wipe.",
+      "rule_id": "CLEAN-001",
+      "score": 0.3
+    },
+    {
+      "explanation": "wipe() iterates all tracked keys, but relies on the tracked keys list being complete and accurate. If setItem was called but setTrackedKeys failed, the key exists in keychain but not in the tracked list \u2014 it survives wipe.",
+      "rule_id": "CLEAN-002",
+      "score": 0.5
+    },
+    {
+      "explanation": "Module never uses localStorage \u2014 web adapter uses IndexedDB with AES-GCM encryption, RN adapter uses platform keychain.",
+      "rule_id": "LS-001",
+      "score": 1.0
+    }
+  ],
+  "run1": [
+    {
+      "explanation": "n/a \u2014 no useEffect or event handlers; this is a storage module, not a React component",
+      "rule_id": "RACE-003",
+      "score": 1.0
+    },
+    {
+      "explanation": "n/a \u2014 no fetch calls in the module",
+      "rule_id": "RACE-004",
+      "score": 1.0
+    },
+    {
+      "explanation": "WebSecureStorageAdapter.getOrCreateEncryptionKey (line ~120) has a race: two concurrent calls can both see no master-key and both generate+store one. The IDB readwrite transaction doesn't prevent this. cachedAdapter singleton init also races if called concurrently from different async contexts.",
+      "rule_id": "RACE-005",
+      "score": 0.3
+    },
+    {
+      "explanation": "In openDB(), the db reference returned is used after the Promise resolves, but another concurrent operation could close or delete the database (wipe() calls db.close() then indexedDB.deleteDatabase). A getItem call holding a stale db reference would fail.",
+      "rule_id": "STALE-002",
+      "score": 0.5
+    },
+    {
+      "explanation": "n/a \u2014 no balance display in this module",
+      "rule_id": "STALE-003",
+      "score": 1.0
+    },
+    {
+      "explanation": "n/a \u2014 no server-side data that needs refetch on focus/reconnect",
+      "rule_id": "STALE-004",
+      "score": 1.0
+    },
+    {
+      "explanation": "n/a \u2014 no modals or overlay layers",
+      "rule_id": "UI-001",
+      "score": 1.0
+    },
+    {
+      "explanation": "n/a \u2014 no back button handling",
+      "rule_id": "UI-002",
+      "score": 1.0
+    },
+    {
+      "explanation": "n/a \u2014 no React components with props",
+      "rule_id": "UI-003",
+      "score": 1.0
+    },
+    {
+      "explanation": "No circular dependencies \u2014 index.ts imports from secureKeyStorage.ts, no reverse imports",
+      "rule_id": "ARCH-001",
+      "score": 1.0
+    },
+    {
+      "explanation": "The main file mixes platform detection, crypto utilities, two storage adapters, factory, and high-level API all in one ~400-line file. Adapters and crypto utils should be separate modules.",
+      "rule_id": "ARCH-002",
+      "score": 0.5
+    },
+    {
+      "explanation": "secureKeyStorage.ts has multiple responsibilities: type definitions, platform detection, crypto helpers, web adapter, RN adapter, factory, and high-level API. Should be split into types.ts, platform.ts, crypto.ts, webAdapter.ts, rnAdapter.ts, index.ts.",
+      "rule_id": "ARCH-003",
+      "score": 0.4
+    },
+    {
+      "explanation": "Code is generally ESLint-clean; minor: `any` type for keychain in RN adapter would trigger @typescript-eslint/no-explicit-any.",
+      "rule_id": "STYLE-001",
+      "score": 0.9
+    },
+    {
+      "explanation": "Imports are minimal and properly ordered \u2014 only internal relative imports.",
+      "rule_id": "STYLE-002",
+      "score": 1.0
+    },
+    {
+      "explanation": "n/a \u2014 no signature verification in this module",
+      "rule_id": "SEC-007",
+      "score": 1.0
+    },
+    {
+      "explanation": "AES-GCM IV is generated via crypto.getRandomValues (12 bytes) which is cryptographically random, but there's no explicit uniqueness check before use. If the RNG produced a duplicate IV (astronomically unlikely but possible), the encryption would be compromised. No IV tracking/counter.",
+      "rule_id": "SEC-008",
+      "score": 0.7
+    },
+    {
+      "explanation": "n/a \u2014 no WebView or iframe content",
+      "rule_id": "SEC-009",
+      "score": 1.0
+    },
+    {
+      "explanation": "Critical: Uint8Array from getRandomValues, the encrypted ciphertext, IV, and TextEncoder output are never zeroed after use. The seed hex string persists in memory. No explicit memory wiping (fill(0) on arrays) after operations complete. Sensitive data lingers in GC-managed memory.",
+      "rule_id": "SEC-010",
+      "score": 0.2
+    },
+    {
+      "explanation": "RN adapter calls require('react-native-keychain') which is a native module. If an OTA update ships JS that references a native module not in the current binary, it crashes. The try/catch fallback to expo-secure-store helps, but the error handling path itself calls require('expo-secure-store') which could also be missing.",
+      "rule_id": "OTA-001",
+      "score": 0.5
+    },
+    {
+      "explanation": "No binary fingerprint or version check before calling native APIs. The code assumes react-native-keychain or expo-secure-store is available without checking the native binary version. An OTA update could ship code that calls APIs not present in older binaries.",
+      "rule_id": "OTA-002",
+      "score": 0.3
+    },
+    {
+      "explanation": "Errors are generally propagated via throw with SecureStorageError wrappers. Minor: getTrackedKeys() swallows errors and returns [] instead of propagating.",
+      "rule_id": "ERR-002",
+      "score": 0.9
+    },
+    {
+      "explanation": "No distinction between transient and non-transient failures. A failed setItem due to invalid input (non-transient) is treated the same as a transient IndexedDB lock failure. Callers cannot distinguish retryable from non-retryable errors.",
+      "rule_id": "ERR-003",
+      "score": 0.7
+    },
+    {
+      "explanation": "n/a \u2014 no address handling in this module",
+      "rule_id": "DATA-001",
+      "score": 1.0
+    },
+    {
+      "explanation": "RN adapter silently falls back from react-native-keychain to expo-secure-store. This is a storage downgrade \u2014 expo-secure-store has different security properties (e.g., no keychain hardware backing on some platforms). The user is not informed of the downgrade. Error is logged but not surfaced.",
+      "rule_id": "DATA-002",
+      "score": 0.4
+    },
+    {
+      "explanation": "n/a \u2014 no stale armed results pattern",
+      "rule_id": "DATA-003",
+      "score": 1.0
+    },
+    {
+      "explanation": "Critical operations throw on failure. Minor: wipe() in RN adapter continues past individual key deletion failures (line ~310) \u2014 a failed wipe of a specific key is logged but not fatal.",
+      "rule_id": "DATA-004",
+      "score": 0.9
+    },
+    {
+      "explanation": "No deduplication of concurrent operations. Two concurrent setItem('wallet-seed', value1) and setItem('wallet-seed', value2) calls will race \u2014 the last one to complete wins, with no ordering guarantee. No mutex/queue on write operations.",
+      "rule_id": "DATA-005",
+      "score": 0.3
+    },
+    {
+      "explanation": "n/a \u2014 no retry/backoff logic in the module",
+      "rule_id": "TIMEOUT-001",
+      "score": 1.0
+    },
+    {
+      "explanation": "n/a \u2014 no retry logic that could swallow non-transient failures",
+      "rule_id": "TIMEOUT-002",
+      "score": 1.0
+    },
+    {
+      "explanation": "MockAdapter class in test file is declared but never used in any test case. The SecureStorageAdapter import in the test file is only used as a type for MockAdapter.",
+      "rule_id": "DEAD-001",
+      "score": 0.5
+    },
+    {
+      "explanation": "No unreachable code \u2014 all branches have reachable paths",
+      "rule_id": "DEAD-002",
+      "score": 1.0
+    },
+    {
+      "explanation": "getTrackedKeys() catch block (line ~330) returns [] instead of propagating \u2014 this swallows storage errors. RN adapter wipe() inner catch (line ~310) logs but doesn't propagate individual key wipe failures. expo-secure-store fallback catch in loadKeychain catches the first require error and tries another module, but doesn't re-throw the original if both fail.",
+      "rule_id": "CATCH-001",
+      "score": 0.3
+    },
+    {
+      "explanation": "n/a \u2014 no interactive UI elements",
+      "rule_id": "A11Y-003",
+      "score": 1.0
+    },
+    {
+      "explanation": "Code fences in README.md have language labels (typescript, bash)",
+      "rule_id": "DOC-001",
+      "score": 1.0
+    },
+    {
+      "explanation": "AES-GCM encryption/decryption lacks inline comments explaining why 12-byte IV is used (NIST recommendation for GCM mode). The key derivation/storage strategy isn't documented. The singleton pattern in WebSecureStorageAdapter isn't explained. No comments on security tradeoffs of storing the encryption key in IndexedDB.",
+      "rule_id": "DOC-002",
+      "score": 0.5
+    },
+    {
+      "explanation": "No validation of data returned from external sources. keychain.getGenericPassword() result is used without checking its shape \u2014 assumes it has a .password property. The expo-secure-store wrapper assumes getItemAsync returns a string. IndexedDB getRequest.result is used without type checking.",
+      "rule_id": "VALID-001",
+      "score": 0.3
+    },
+    {
+      "explanation": "trackedKeys from JSON.parse(result.password) is not validated per-item. If the stored JSON is corrupted or contains non-string entries, the wipe() method will iterate invalid data. No schema validation on the parsed array.",
+      "rule_id": "VALID-002",
+      "score": 0.2
+    },
+    {
+      "explanation": "n/a \u2014 no iframe content",
+      "rule_id": "SANDBOX-001",
+      "score": 1.0
+    },
+    {
+      "explanation": "n/a \u2014 no CSP headers to set (module-level code)",
+      "rule_id": "SANDBOX-002",
+      "score": 1.0
+    },
+    {
+      "explanation": "n/a \u2014 no resolveRequest pattern",
+      "rule_id": "STATE-001",
+      "score": 1.0
+    },
+    {
+      "explanation": "cachedAdapter singleton could get out of sync with platform state. If resetSecureStorageAdapter() is called but a reference to the old adapter is held, operations on the old adapter could conflict with the new one. Minor issue.",
+      "rule_id": "STATE-002",
+      "score": 0.8
+    },
+    {
+      "explanation": "openDB() is called on every setItem, getItem, and removeItem \u2014 each call opens a new IDBDatabase connection. The database connection should be cached/reused. getOrCreateEncryptionKey() also opens DB and does a transaction on every encrypt/decrypt call.",
+      "rule_id": "PERF-001",
+      "score": 0.3
+    },
+    {
+      "explanation": "Names are generally clear. Minor: keyNameForKey is a bit redundant; sanitizeKey would be clearer. loadKeychain does more than load \u2014 it also sets up fallbacks.",
+      "rule_id": "NAME-001",
+      "score": 0.9
+    },
+    {
+      "explanation": "n/a \u2014 new module, no existing behavior to preserve",
+      "rule_id": "PRES-001",
+      "score": 1.0
+    },
+    {
+      "explanation": "n/a \u2014 no balance display",
+      "rule_id": "BAL-001",
+      "score": 1.0
+    },
+    {
+      "explanation": "keychain: any in ReactNativeSecureStorageAdapter is an unsafe type. getRequest.result is untyped in the web adapter. The expo-secure-store shim object is untyped. No type guards on external data.",
+      "rule_id": "TYPE-001",
+      "score": 0.4
+    },
+    {
+      "explanation": "Uses SecureStore.WHEN_UNLOCKED which is a valid expo-secure-store option, but doesn't verify the enum exists at runtime. If the expo-secure-store version doesn't export WHEN_UNLOCKED, it would be undefined and silently fail.",
+      "rule_id": "TYPE-002",
+      "score": 0.7
+    },
+    {
+      "explanation": "n/a \u2014 no passkey operations in this module",
+      "rule_id": "UV-001",
+      "score": 1.0
+    },
+    {
+      "explanation": "SecureStorageAdapter interface is properly implemented by both adapters. Minor: the expo-secure-store shim doesn't fully implement the keychain API surface (resetGenericPassword throws).",
+      "rule_id": "API-001",
+      "score": 0.9
+    },
+    {
+      "explanation": "n/a \u2014 no fetch/XMLHttpRequest interceptors",
+      "rule_id": "API-002",
+      "score": 1.0
+    },
+    {
+      "explanation": "n/a \u2014 no raw HTML files",
+      "rule_id": "API-003",
+      "score": 1.0
+    },
+    {
+      "explanation": "RN adapter wipe() only removes tracked keys. If keys were stored by a previous version that didn't track them, or if the tracked_keys entry is corrupted/deleted, those orphaned keychain entries survive the wipe. Not a complete keychain wipe.",
+      "rule_id": "CLEAN-001",
+      "score": 0.3
+    },
+    {
+      "explanation": "wipe() iterates all tracked keys, but relies on the tracked keys list being complete and accurate. If setItem was called but setTrackedKeys failed, the key exists in keychain but not in the tracked list \u2014 it survives wipe.",
+      "rule_id": "CLEAN-002",
+      "score": 0.5
+    },
+    {
+      "explanation": "Module never uses localStorage \u2014 web adapter uses IndexedDB with AES-GCM encryption, RN adapter uses platform keychain.",
+      "rule_id": "LS-001",
+      "score": 1.0
+    }
+  ]
+}

@@ -20,7 +20,7 @@ from judge import (
     load_solution_files, judge_solution, LLMBackend, build_task_from_args,
     result_to_dict, Finding, CategoryResult, SolutionResult,
     get_scoring, compute_emphasis, dedupe_findings, compute_category_penalty,
-    DEFAULT_SCORING
+    DEFAULT_SCORING, validate_ollama_cloud_config
 )
 
 RUBRIC_PATH = os.path.join(os.path.dirname(__file__), 'rubric.json')
@@ -180,6 +180,18 @@ class TestSecurityRules:
         findings = run_single_rule(code, rule)
         assert len(findings) == 0
 
+    def test_sec003_math_random_in_markdown_is_not_code(self):
+        rule = get_rule(self.rubric, 'SEC-003')
+        code = "Never uses Math.random() for key generation."
+        findings = run_single_rule(code, rule, 'README.md')
+        assert len(findings) == 0
+
+    def test_sec003_math_random_in_string_is_not_code(self):
+        rule = get_rule(self.rubric, 'SEC-003')
+        code = 'const warning = "Never uses Math.random()";'
+        findings = run_single_rule(code, rule)
+        assert len(findings) == 0
+
     def test_sec008_eval(self):
         rule = get_rule(self.rubric, 'SEC-008')
         code = "eval(userInput);"
@@ -192,6 +204,12 @@ class TestSecurityRules:
         code = "new Function('return ' + userInput)();"
         findings = run_single_rule(code, rule)
         assert len(findings) == 1
+
+    def test_sec008_eval_in_string_is_not_code(self):
+        rule = get_rule(self.rubric, 'SEC-008')
+        code = 'const warning = "never call eval(userInput)";'
+        findings = run_single_rule(code, rule)
+        assert len(findings) == 0
 
     def test_sec009_innerhtml_dynamic(self):
         rule = get_rule(self.rubric, 'SEC-009')
@@ -565,6 +583,19 @@ class TestCLI:
             if os.path.exists(output_path):
                 os.unlink(output_path)
 
+
+class TestOllamaCloudGuardrails:
+    def test_rejects_local_ollama_base_url(self):
+        try:
+            validate_ollama_cloud_config("glm-5.2:cloud", "http://127.0.0.1:11434/v1")
+        except ValueError as exc:
+            assert "non-cloud Ollama base URL" in str(exc)
+        else:
+            raise AssertionError("expected local Ollama base URL to be rejected")
+
+    def test_accepts_direct_cloud_catalog_model(self):
+        validate_ollama_cloud_config("glm-5.2", "https://ollama.com")
+
 # ==================== Main ====================
 
 if __name__ == '__main__':
@@ -574,7 +605,8 @@ if __name__ == '__main__':
     test_classes = [
         TestRubric, TestStripComments, TestSecurityRules,
         TestFunctionalRules, TestMaintainabilityRules,
-        TestParseDiff, TestSmokeTest, TestScoring, TestPanel, TestCLI
+        TestParseDiff, TestSmokeTest, TestScoring, TestPanel, TestCLI,
+        TestOllamaCloudGuardrails
     ]
 
     passed = 0
